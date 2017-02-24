@@ -5,7 +5,7 @@ clc
 
 m = 100;
 n = 100; % matrix size
-b = 1; % block size
+b = [1 20]; % block size
 p = 0; % oversampling parameter
 q = 0; % power iteration parameter
 type = 'BIE'; % 'fast' for matrix with quickly decaying SVs
@@ -26,138 +26,189 @@ end
 
 function [] = DRIVER_max_err_diff_plots(type,m,n,b,p,q)
 
-max_diff_1 = 0;
-max_diff_rand_err1 = zeros(1,n);
-max_diff_rand_up_err1 = zeros(1,n);
 
-max_diff_2 = 0;
-max_diff_rand_err2 = zeros(1,n);
-max_diff_rand_up_err2 = zeros(1,n);
+max_diff_rand_err1 = zeros(length(b),n);
+max_diff_rand_up_err1 = zeros(length(b),n);
 
-for i=1:100
+max_diff_rand_err2 = zeros(length(b),n);
+max_diff_rand_up_err2 = zeros(length(b),n);
 
-    %%% Create a test matrix. 
-    switch type
-        case 'fast'
-            A = LOCAL_fast_decay(m,n,1e-5);
-        case 'slow'
-            A = LOCAL_slow_decay(m,n);
-        case 's_curve'
-            A = LOCAL_S_curve(m,n,round(0.5*n),1e-2);
-        case 'hilbert'
-            A = hilb(n);
-        case 'BIE'
-            A = generate_BIE(n);
-        case 'vander'
-            A = vander(linspace(0,1,n));
-        case 'gap'
-            A = LOCAL_gap(m,n);
+for j=1:length(b)
+
+    max_diff_1 = 0;
+    max_diff_2 = 0;
+
+    for i=1:100
+
+        %%% Create a test matrix. 
+        switch type
+            case 'fast'
+                A = LOCAL_fast_decay(m,n,1e-5);
+            case 'slow'
+                A = LOCAL_slow_decay(m,n);
+            case 's_curve'
+                A = LOCAL_S_curve(m,n,round(0.5*n),1e-2);
+            case 'hilbert'
+                A = hilb(n);
+            case 'BIE'
+                A = generate_BIE(n);
+            case 'vander'
+                A = vander(linspace(0,1,n));
+            case 'gap'
+                A = LOCAL_gap(m,n);
+        end
+
+
+        %%% Normalize the test matrix so it has spectral norm 1.
+        ss = svd(A);
+        A  = A/ss(1);
+        ss = ss/ss(1);
+
+
+        %%% Perform factorizations:
+        [U1,T1,V1] = qr(A);         % Built-in LAPACK.
+        tic;
+        [U2,T2,V2] = randUTV_econ(A,b(j),p,q);        % randomized UTV
+        noupdate_time = toc;
+
+        tic;
+        [U3,T3,V3] = randUTVupdate_econ(A,b(j),p);         % randomized UTV with downdating 
+        update_time = toc;
+        %fprintf('no update: %f sec \n',noupdate_time);
+        %fprintf('update: %f sec \n',update_time);
+
+
+        %fprintf('Computing spectral norm errors\n')
+        %%% Compute spectral norm errors
+        err1_qr = [ss(1),zeros(1,n-1)];
+        err1_rand    = [ss(1),zeros(1,n-1)];
+        err1_rand_up = [ss(1),zeros(1,n-1)];
+        for i = 1:(n-1)
+          if mod(i,100) == 0
+              i
+          end
+          err1_qr(i+1) = norm(T1((i+1):n,(i+1):n));
+          err1_rand(i+1)    = norm( T2((i+1):n,(i+1):n));
+          err1_rand_up(i+1) = norm( T3((i+1):n,(i+1):n));
+        end
+
+        %fprintf('Computing Frobenius norm errors\n')
+        %%% Compute Frobenius norm errors
+        err2_svd     = [norm(A,'fro'),zeros(1,n-1)];
+        err2_qr = [norm(A,'fro'),zeros(1,n-1)];
+        err2_rand    = [norm(A,'fro'),zeros(1,n-1)];
+        err2_rand_up = [norm(A,'fro'),zeros(1,n-1)];
+        for i = 1:(n-1)
+          if mod(i,100) == 0
+              i
+          end
+          err2_svd(i+1)     = norm(ss((i+1):n));
+          err2_qr(i+1) = norm(T1((i+1):n,(i+1):n),'fro');
+          err2_rand(i+1)    = norm( T2((i+1):n,(i+1):n),'fro');
+          err2_rand_up(i+1) = norm( T3((i+1):n,(i+1):n),'fro');
+        end
+
+        % calculate difference in error b/w updating and no updating; find and
+        % store error vectors with maximum difference
+        err1_diff = sum(abs(err1_rand-err1_rand_up));
+        if err1_diff > max_diff_1
+            max_diff_1 = err1_diff;
+            max_diff_rand_err1(j,:) = err1_rand;
+            max_diff_rand_up_err1(j,:) = err1_rand_up;
+        end
+        
+        err2_diff = sum(abs(err2_rand-err2_rand_up));
+        if err2_diff > max_diff_2
+            max_diff_2 = err2_diff;
+            max_diff_rand_err2(j,:) = err2_rand;
+            max_diff_rand_up_err2(j,:) = err2_rand_up;
+        end
     end
 
-
-    %%% Normalize the test matrix so it has spectral norm 1.
-    ss = svd(A);
-    A  = A/ss(1);
-    ss = ss/ss(1);
-
-
-    %%% Perform factorizations:
-    [U1,T1,V1] = qr(A);         % Built-in LAPACK.
-    tic;
-    [U2,T2,V2] = randUTV_econ(A,b,p,q);        % randomized UTV
-    noupdate_time = toc;
-
-    tic;
-    [U3,T3,V3] = randUTVupdate_econ(A,b,p);         % randomized UTV with downdating 
-    update_time = toc;
-    %fprintf('no update: %f sec \n',noupdate_time);
-    %fprintf('update: %f sec \n',update_time);
-
-
-    %fprintf('Computing spectral norm errors\n')
-    %%% Compute spectral norm errors
-    err1_qr = [ss(1),zeros(1,n-1)];
-    err1_rand    = [ss(1),zeros(1,n-1)];
-    err1_rand_up = [ss(1),zeros(1,n-1)];
-    for i = 1:(n-1)
-      if mod(i,100) == 0
-          i
-      end
-      err1_qr(i+1) = norm(T1((i+1):n,(i+1):n));
-      err1_rand(i+1)    = norm( T2((i+1):n,(i+1):n));
-      err1_rand_up(i+1) = norm( T3((i+1):n,(i+1):n));
-    end
-
-    %fprintf('Computing Frobenius norm errors\n')
-    %%% Compute Frobenius norm errors
-    err2_svd     = [norm(A,'fro'),zeros(1,n-1)];
-    err2_qr = [norm(A,'fro'),zeros(1,n-1)];
-    err2_rand    = [norm(A,'fro'),zeros(1,n-1)];
-    err2_rand_up = [norm(A,'fro'),zeros(1,n-1)];
-    for i = 1:(n-1)
-      if mod(i,100) == 0
-          i
-      end
-      err2_svd(i+1)     = norm(ss((i+1):n));
-      err2_qr(i+1) = norm(T1((i+1):n,(i+1):n),'fro');
-      err2_rand(i+1)    = norm( T2((i+1):n,(i+1):n),'fro');
-      err2_rand_up(i+1) = norm( T3((i+1):n,(i+1):n),'fro');
-    end
-
-    % calculate difference in error b/w updating and no updating; find and
-    % store error vectors with maximum difference
-    err1_diff = sum(abs(err1_rand-err1_rand_up));
-    if err1_diff > max_diff_1
-        max_diff_1 = err1_diff;
-        max_diff_rand_err1 = err1_rand;
-        max_diff_rand_up_err1 = err1_rand_up;
-    end
-    
-    err2_diff = sum(abs(err2_rand-err2_rand_up));
-    if err2_diff > max_diff_2
-        max_diff_2 = err2_diff;
-        max_diff_rand_err2 = err2_rand;
-        max_diff_rand_up_err2 = err2_rand_up;
-    end
-    max_diff_1
 end
 
 %%% Plot maximum difference in errors between updating and no updating
-figure(1)
+f1 = figure(1);
 subplot(1,2,1)
-semilogy(0:(n-1),ss,'k',...
-         0:(n-1),max_diff_rand_err1,'r',...
-         0:(n-1),max_diff_rand_up_err1,'g')
-legend('svd','randUTV','randUTVupdate')
-ylabel('e_k = ||A - A_k||')
+leg_str = [];
+for i=1:length(b)
+    plot(0:(n-1),(max_diff_rand_up_err1(i,:)-max_diff_rand_err1(i,:))./(max_diff_rand_err1(i,:)))
+    hold on
+    leg_str = strvcat(leg_str,strcat('b = ',num2str(b(i))));
+end
+hold off
+legend(leg_str)
+ylabel('(e_{update} - e_{no update}) / e_{no update}')
 xlabel('k')
-title(['Operator norm, b = ' num2str(b)],'FontWeight','normal');
+title('Operator norm,no randomized updating, BIE, n=100, worst of 100 runs','FontWeight','normal');
 
 subplot(1,2,2)
-semilogy(0:(n-1),max_diff_rand_err2,'r',...
-         0:(n-1),max_diff_rand_up_err2,'g')
-legend('randUTV','randUTVupdate')
-ylabel('e_k = ||A - A_k||')
+leg_str = [];
+for i=1:length(b)
+    plot(0:(n-1),(max_diff_rand_up_err2(i,:)-max_diff_rand_err1(i,:))./(max_diff_rand_err2(i,:)))
+    hold on
+    leg_str = strvcat(leg_str,strcat('b = ',num2str(b(i))));
+end
+hold off
+legend(leg_str)
+ylabel('(e_{update} - e_{no update}) / e_{no update}')
 xlabel('k')
-title(['Frobenius norm, b = ' num2str(b)],'FontWeight','normal');
+title('Frobenius norm','FontWeight','normal');
 %export_fig('fig_errors_fast.pdf','-pdf','-trans')
 
-%%% Plot diagonal entries.
-% figure(2)
-% subplot(1,1,1)
-% semilogy(1:n,ss,'k',...
-%          1:n,abs(diag(T1)),'r',...
-%          1:n,sort(abs(diag(T2)),'descend'),'g',...
-%          1:n,sort(abs(diag(T3)),'descend'),'b',...
-%          1:n,sort(abs(diag(T1)),'descend'),'r')
-% legend('svd','cpqr','randUTV','randUTVupdate')
-% xlabel('k')
-% ylabel('|R(k,k)|')
-% title('Magnitude of diagonal entries','FontWeight','normal')
+%%% plot the errors themselves that give the maximum difference
+f2 = figure(2);
+f2a1 = subplot(1,2,1);
+hold on
 
-% save(type)
+g_objs = [];
+g_temp = semilogy(0:(n-1),ss);
+g_objs = [g_objs g_temp];
+leg_str = ['svd'];
+
+for i=1:length(b)
+    g_temp = semilogy(0:(n-1),max_diff_rand_err1(i,:));
+    g_objs = [g_objs g_temp];
+    leg_str = strvcat(leg_str,strcat('no update, b = ',num2str(b(i))));
+
+    g_temp = semilogy(0:(n-1),max_diff_rand_up_err1(i,:),'--');
+    g_objs = [g_objs g_temp];
+    leg_str = strvcat(leg_str,strcat('update, b = ',num2str(b(i))));
+end
+hold off
+legend(leg_str)
+ylabel('e_k')
+xlabel('k')
+title('Operator norm,no randomized updating, BIE, n=100, worst of 100 runs','FontWeight','normal')
+set(f2a1,'yscale','log')
+
+f2a2 = subplot(1,2,2);
+hold on
+
+g_objs = [];
+g_temp = semilogy(0:(n-1),err2_svd);
+g_objs = [g_objs g_temp];
+
+leg_str = ['svd'];
+for i=1:length(b)
+    g_temp = semilogy(0:(n-1),max_diff_rand_err2(i,:));
+    g_objs = [g_objs g_temp];
+    leg_str = strvcat(leg_str,strcat('no update, b = ',num2str(b(i))));
+
+    g_temp = semilogy(0:(n-1),max_diff_rand_up_err2(i,:),'--');
+    g_objs = [g_objs g_temp];
+    leg_str = strvcat(leg_str,strcat('update, b = ',num2str(b(i))));
+end
+hold off
+legend(g_objs,leg_str)
+ylabel('e_k')
+xlabel('k')
+title('Frobenius norm','FontWeight','normal');
+set(f2a2,'yscale','log')
 
 keyboard
+close(f1)
+close(f2)
 
 end
 
