@@ -6,8 +6,8 @@ clc
 m = 2000;
 n = 2000; % matrix size
 b = 64; % block size
-p = 10; % oversampling parameter
-q = 2; % power iteration parameter
+p = 0; % oversampling parameter
+q = 0; % power iteration parameter
 type = 'BIE'; % 'fast' for matrix with quickly decaying SVs
                % 'slow' for matrix with slowly decaying SVs
                % 's_curve' for matrix whose SVs decay quickly at first,
@@ -70,7 +70,7 @@ end
 
 function [] = DRIVER_time_plots(type,b,p,q)
 
-n = 1000*[2 3 4 5 6 8 10];
+n = 100*[5 10 20 30 40 50 60 80 100];
 cpqr_time = zeros(1,length(n));
 svd_time = zeros(1,length(n));
 noupdate_time = zeros(1,length(n));
@@ -95,11 +95,11 @@ switch type
     case 's_curve'
         A = LOCAL_S_curve(n(i),n(i),round(0.5*n),1e-2);
     case 'hilb'
-        A = hilb(n);
+        A = hilb(n(i));
     case 'BIE'
-        A = generate_BIE(n);
+        A = generate_BIE(n(i));
      case 'vander'
-        A = vander(linspace(0,1,n));
+        A = vander(linspace(0,1,n(i)));
 end
 
 %%% Normalize the test matrix so it has spectral norm 1.
@@ -134,6 +134,8 @@ N = nuc_norm_econ(A,b,p,q);
 nuc_norm_time(i) = cputime - t;
     
 end
+
+keyboard
 
 %%% Plot times
 figure(1)
