@@ -1,0 +1,27 @@
+# Definitions of variables
+
+CC      = gcc
+CCFLAGS = -DMKL_ILP64 -m64 -I/home/nathan/intel/mkl/include
+LD      = gcc
+LDFLAGS = -fopenmp -lpthread
+
+
+# Definitions of rules
+dgemm_test.x : dgemm_test.o
+	$(LD) \
+	-o dgemm_test.x \
+	dgemm_test.o \
+	-Wl,--start-group \
+	/home/nathan/intel/mkl/lib/intel64/libmkl_intel_ilp64.a \
+	/home/nathan/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
+	/home/nathan/intel/mkl/lib/intel64/libmkl_core.a \
+	-Wl,--end-group \
+	-ldl -lm -lpthread -lgomp	
+
+
+dgemm_test.o : dgemm_test.c
+	$(CC) -c dgemm_test.c \
+	-DMKL_ILP64 -m64 -I/home/nathan/intel/mkl/include
+
+clean:
+	rm -f a.out *.x *.o *~ core
