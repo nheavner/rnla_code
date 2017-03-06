@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include<stdio.h>
+#include<stdint.h>
 
 #define l_max( a, b ) ( (a) >  (b) ? (a) : (b) )
 #define l_min( a, b ) ( (a) < (b) ? (a) : (b) )
@@ -17,7 +18,7 @@ static void print_double_matrix(char * name, int m_A, int n_A,
 // ===================================================================
 
 int main( int argc, char *argv[] ) {
-  int	nb_alg, pp, m_A, n_A, ldim_A, m_B, n_B, ldim_B, ldim_C;
+  int64_t	nb_alg, pp, m_A, n_A, ldim_A, m_B, n_B, ldim_B, ldim_C;
   int   i, j;
   double * buff_A, * buff_B, * buff_C;
   char all = 'A', t = 'T', n = 'N';
