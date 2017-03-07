@@ -1,0 +1,32 @@
+# Definitions of variables.
+
+CC      = icc # option: gcc-6
+CCFLAGS = -O
+LD      = icc # option: gcc-6
+LDFLAGS = -O
+
+# Definitions of rules.
+
+simple_test.x : simple_test.o UTV_WY_blk_var2.o
+	$(LD)  \
+    -o simple_test.x \
+    simple_test.o \
+    UTV_WY_blk_var2.c \
+    /opt/intel/mkl/lib/libmkl_intel_lp64.a \
+    /opt/intel/mkl/lib/libmkl_intel_thread.a \
+	/opt/intel/mkl/lib/libmkl_core.a \
+	-L/opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib \
+	-liomp5 -lpthread -lm -ldl
+
+	install_name_tool -change @rpath/libiomp5.dylib /opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib/libiomp5.dylib ./simple_test.x
+
+simple_test.o : simple_test.c
+	$(CC) $(CCFLAGS) -O -liomp5 -c simple_test.c
+
+%.o : %.c
+	$(CC) $(CCFLAGS) -c $< -o $@
+
+clean : FORCE
+	rm -f a.out *.x *.o *~ core
+
+FORCE :

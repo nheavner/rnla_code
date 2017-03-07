@@ -7,23 +7,24 @@ LDFLAGS = -O
 
 # Definitions of rules
 
-dgemm_test.x : dgemm_test.o
-	$(LD)  \
-	-o dgemm_test.x \
-	dgemm_test.o \
-	/opt/intel/mkl/lib/libmkl_intel_ilp64.a \
+dlange_test.x : dlange_test.o
+	@$(LD)  \
+	-o dlange_test.x \
+	dlange_test.o \
+	/opt/intel/mkl/lib/libmkl_intel_lp64.a \
 	/opt/intel/mkl/lib/libmkl_intel_thread.a \
 	/opt/intel/mkl/lib/libmkl_core.a \
 	-L/opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib \
 	-liomp5 -lpthread -lm -ldl
 	
-	install_name_tool -change @rpath/libiomp5.dylib /opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib/libiomp5.dylib ./dgemm_test.x
+	@install_name_tool -change @rpath/libiomp5.dylib /opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib/libiomp5.dylib ./dlange_test.x
 
 
-dgemm_test.o : dgemm_test.c
-	$(CC) -c dgemm_test.c \
+dlange_test.o : dlange_test.c
+	@$(CC) -Wall -c dlange_test.c \
 	-DMKL_ILP64 -m64 -I/opt/intel/mkl/include
 
 clean : FORCE 
 	rm -f a.out *.x *.o *~ core
-        
+
+FORCE :

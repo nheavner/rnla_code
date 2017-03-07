@@ -7,10 +7,10 @@ LDFLAGS = -fopenmp -lpthread
 
 
 # Definitions of rules
-dgemm_test.x : dgemm_test.o
+dlange_test.x : dlange_test.o
 	$(LD) \
-	-o dgemm_test.x \
-	dgemm_test.o \
+	-o dlange_test.x \
+	dlange_test.o \
 	-Wl,--start-group \
 	/home/nathan/intel/mkl/lib/intel64/libmkl_intel_ilp64.a \
 	/home/nathan/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
@@ -19,9 +19,11 @@ dgemm_test.x : dgemm_test.o
 	-ldl -lm -lpthread -lgomp	
 
 
-dgemm_test.o : dgemm_test.c
-	$(CC) -c dgemm_test.c \
+dlange_test.o : dlange_test.c
+	$(CC) -c dlange_test.c \
 	-DMKL_ILP64 -m64 -I/home/nathan/intel/mkl/include
 
 clean : FORCE
 	rm -f a.out *.x *.o *~ core
+
+FORCE : 
