@@ -1,0 +1,32 @@
+# Definitions of variables.
+
+CC      = gcc
+CCFLAGS = -O
+LD      = gcc 
+LDFLAGS = -O
+
+# Definitions of rules.
+
+simple_test.x : simple_test.o compute_nuc_norm.o
+	@$(LD)  \
+    -o simple_test.x \
+    simple_test.o \
+    compute_nuc_norm.c \
+	-Wl, --start-group \
+    /home/nathan/intel/mkl/lib/intel64/libmkl_intel_lp64.a \
+    /home/nathan/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
+	/home/intel/mkl/lib/intel64/libmkl_core.a \
+	-Wl,--end-group \
+	-ldl -lpthread -lm -lgomp
+
+simple_test.o : simple_test.c
+	@$(CC) -c simple_test.c \
+	-DMKL_LP64 -m64 -I/home/nathan/intel/mkl/include
+
+%.o : %.c
+	$(CC) $(CCFLAGS) -c $< -o $@
+
+clean : FORCE
+	rm -f a.out *.x *.o *~ core
+
+FORCE :

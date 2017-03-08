@@ -38,8 +38,7 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "UTV_WY_blk_var2.h"
-
+#include "compute_nuc_norm.h"
 
 // ============================================================================
 // Definition of macros.
@@ -121,7 +120,7 @@ static int NoFLA_QRP_pivot_G( int j_max_col,
 
 
 // ============================================================================
-int UTV_WY_blk_var2(
+int compute_nuc_norm(
         int m_A, int n_A, double * buff_A, int ldim_A,
         int build_u, int m_U, int n_U, double * buff_U, int ldim_U,
         int build_v, int m_V, int n_V, double * buff_V, int ldim_V,
@@ -168,14 +167,14 @@ int UTV_WY_blk_var2(
   double  * buff_G, * buff_Y, * buff_S1, * buff_S2,
           * buff_SU, * buff_sv, * buff_SVT,
           * buff_SUtl, * buff_svl, * buff_SVTtl,
-          * buff_A11, * buff_ABR, * buff_AB1, * buff_AB2,
+          * buff_A11, * buff_ABR, * buff_AB1, * buff_AB2, * buff_A22,
           * buff_A01, * buff_A12,
           * buff_GBl, * buff_YBl, * buff_S1tl, * buff_S2tl,
           * buff_BR, * buff_C1, * buff_D1, * buff_CR, * buff_DR;
   int     i, j, bRow, mn_A;
   int     ldim_Y, ldim_G, ldim_S1, ldim_S2, ldim_SU, ldim_SVT, ldim_SA;
   int     m_YBl, n_YBl, m_GBl, n_GBl, m_CR, n_CR, m_AB1, n_AB1, m_AB2, n_AB2,
-          m_WR, n_WR, m_XR, n_XR;
+          m_A22, n_A22, m_WR, n_WR, m_XR, n_XR;
 #ifdef PROFILE
   double  t1, t2, tt_by,
           tt_qr1_fact, tt_qr1_updt_a, tt_qr1_updt_v,
@@ -274,7 +273,10 @@ int UTV_WY_blk_var2(
     n_WR  = n_U - i;
     m_XR  = m_V;
     n_XR  = n_V - i;
+	m_A22 = m_A - i;
+	n_A22 = n_A - i;
 
+    buff_A22  = & buff_A[ i + i * ldim_A ];
     buff_A11  = & buff_A[ i + i * ldim_A ];
     buff_ABR  = & buff_A[ i + i * ldim_A ];
     buff_AB1  = & buff_A[ i + i * ldim_A ];
@@ -370,7 +372,7 @@ int UTV_WY_blk_var2(
     NoFLA_Apply_Q_WY_rnfc_blk_var2(
         m_YBl, bRow, buff_YBl,  ldim_Y,
         bRow,  bRow, buff_S1tl, ldim_S1,
-        m_CR,  n_CR, buff_BR,   ldim_A );
+        m_A22, n_A22, buff_A22, ldim_A ); //m_CR,  n_CR, buff_BR,   ldim_A ); for full factorization
 
 #ifdef PROFILE
     t2 = FLA_Clock();
@@ -488,9 +490,11 @@ int UTV_WY_blk_var2(
     // FLA_Gemm( FLA_TRANSPOSE, FLA_NO_TRANSPOSE,
     //           FLA_ONE, SUtl, A12copy, FLA_ZERO, A12 );
     // FLA_Obj_free( & A12copy );
-    NoFLA_Multiply_BAB( 't', 'n',
-        bRow, bRow,           buff_SUtl, ldim_SU,
-        bRow, n_A - i - bRow, buff_A12,  ldim_A );
+
+	// execute these lines only for full factorization
+    // NoFLA_Multiply_BAB( 't', 'n', 
+    //    bRow, bRow,           buff_SUtl, ldim_SU, 
+    //    bRow, n_A - i - bRow, buff_A12,  ldim_A );
 
     // Apply V of miniSVD to A.
     // FLA_Obj_create_conf_to( FLA_NO_TRANSPOSE, A01, & A01copy );
@@ -498,9 +502,11 @@ int UTV_WY_blk_var2(
     // FLA_Gemm( FLA_NO_TRANSPOSE, FLA_TRANSPOSE,
     //           FLA_ONE, A01copy, SVTtl, FLA_ZERO, A01 );
     // FLA_Obj_free( & A01copy );
-    NoFLA_Multiply_BBA( 't', 'n',
-        bRow, bRow, buff_SVTtl, ldim_SVT,
-        i,    bRow, buff_A01,   ldim_A );
+
+	// only execute these lines for full factorization
+    // NoFLA_Multiply_BBA( 't', 'n',
+    //    bRow, bRow, buff_SVTtl, ldim_SVT,
+    //    i,    bRow, buff_A01,   ldim_A );
 #ifdef PROFILE
     t2 = FLA_Clock();
     tt_svd_updt_a += ( t2 - t1 );

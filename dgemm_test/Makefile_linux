@@ -25,3 +25,5 @@ dgemm_test.o : dgemm_test.c
 
 clean : FORCE
 	rm -f a.out *.x *.o *~ core
+
+FORCE :
