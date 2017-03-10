@@ -28,8 +28,10 @@ int main( int argc, char *argv[] ) {
   int i;
 
   int n_arr[] = {500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000};
-  clock_t t1, diff;
 
+  double t_proc;
+  struct timespec ts_start, ts_end;
+  
   FILE * ofp;
   char * mode = "w";
 
@@ -63,16 +65,17 @@ int main( int argc, char *argv[] ) {
     // We use a small block size to factorize the small input matrix, but you
     // should use larger blocksizes such as 64 for larger matrices.
     
-    t1 = clock();
+    clock_gettime( CLOCK_MONOTONIC, &ts_start );
 
 	NoFLA_UTV_WY_blk_var2( m_A, n_A, buff_A, ldim_A, 
-        0, m_A, m_A, buff_U, ldim_U, 
-        0, n_A, n_A, buff_V, ldim_V, 
-        3, 10, 2 );
-        //// 64, 10, 2 );
+        1, m_A, m_A, buff_U, ldim_U, 
+        1, n_A, n_A, buff_V, ldim_V, 
+        64, 0, 0 );
 
-	diff = clock() - t1;;
-	fprintf( ofp, "%.2e ", ( double ) diff / CLOCKS_PER_SEC );
+	clock_gettime( CLOCK_MONOTONIC, &ts_end );
+    t_proc = (double) ((ts_end.tv_sec - ts_start.tv_sec)
+            + (ts_end.tv_nsec - ts_start.tv_nsec) / (1E9));
+	fprintf( ofp, "%.2e ", t_proc );
 
     printf( "%% Just after computing factorization.\n" );
 

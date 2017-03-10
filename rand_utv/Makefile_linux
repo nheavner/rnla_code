@@ -12,15 +12,15 @@ timing.x : timing.o NoFLA_UTV_WY_blk_var2.o
 	-o timing.x \
 	timing.o \
 	NoFLA_UTV_WY_blk_var2.c \
-    -Wl, --start-group \
+    -Wl,--start-group \
     /home/nathan/intel/mkl/lib/intel64/libmkl_intel_lp64.a \
     /home/nathan/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
-	/home/intel/mkl/lib/intel64/libmkl_core.a \
+    /home/nathan/intel/mkl/lib/intel64/libmkl_core.a \
 	-Wl,--end-group \
 	-ldl -lpthread -lm -lgomp
 
 timing.o : timing.c
-	@$(CC) -c simple_test.c \
+	@$(CC) -c timing.c \
 	-DMKL_LP64 -m64 -I/home/nathan/intel/mkl/include
 
 simple_test.x : simple_test.o NoFLA_UTV_WY_blk_var2.o
