@@ -36,8 +36,8 @@ int main( int argc, char *argv[] ) {
   MKL_INT lwork, info;
 
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 13;
-  n_A      = 10;
+  m_A      = 8000;
+  n_A      = 8000;
   mn_A     = min( m_A, n_A );
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
@@ -78,10 +78,10 @@ int main( int argc, char *argv[] ) {
   // New factorization.
   // We use a small block size to factorize the small input matrix, but you
   // should use larger blocksizes such as 64 for larger matrices.
-  compute_nuc_norm( m_A, n_A, buff_A, ldim_A, 
-      0, m_A, m_A, buff_U, ldim_U, 
-      0, n_A, n_A, buff_V, ldim_V, 
-      3, 10, 2 );
+  //compute_nuc_norm( m_A, n_A, buff_A, ldim_A, 
+  //    0, m_A, m_A, buff_U, ldim_U, 
+  //    0, n_A, n_A, buff_V, ldim_V, 
+  //    3, 10, 2 );
       //// 64, 10, 2 );
   printf( "%% Just after computing factorization.\n" );
 

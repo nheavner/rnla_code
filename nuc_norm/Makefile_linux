@@ -31,7 +31,7 @@ simple_test.x : simple_test.o compute_nuc_norm.o
 	-Wl,--start-group \
     /home/nathan/intel/mkl/lib/intel64/libmkl_intel_lp64.a \
     /home/nathan/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
-	/home/intel/mkl/lib/intel64/libmkl_core.a \
+    /home/nathan/intel/mkl/lib/intel64/libmkl_core.a \
 	-Wl,--end-group \
 	-ldl -lpthread -lm -lgomp
 

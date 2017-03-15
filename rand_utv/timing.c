@@ -70,7 +70,7 @@ int main( int argc, char *argv[] ) {
 	NoFLA_UTV_WY_blk_var2( m_A, n_A, buff_A, ldim_A, 
         1, m_A, m_A, buff_U, ldim_U, 
         1, n_A, n_A, buff_V, ldim_V, 
-        64, 0, 0 );
+        64, 0, 2 );
 
 	clock_gettime( CLOCK_MONOTONIC, &ts_end );
     t_proc = (double) ((ts_end.tv_sec - ts_start.tv_sec)
