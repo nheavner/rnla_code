@@ -11,6 +11,7 @@
 //#define PRINT_DATA
 #define CHECK_ERROR
 
+
 // ============================================================================
 // Declaration of local prototypes.
 
@@ -29,7 +30,7 @@ int main( int argc, char *argv[] ) {
   double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
   double err;
   int i;
-  double A_norm = 0.0, A_norm_est = 0.0;
+  double A_norm = 0.0, A_norm_est = 0.0, upper_T_norm = 0.0;
 
   // for dgesvd
   double * buff_work;
@@ -80,8 +81,9 @@ int main( int argc, char *argv[] ) {
   // should use larger blocksizes such as 64 for larger matrices.
   compute_nuc_norm( m_A, n_A, buff_A, ldim_A, 
       0, m_A, m_A, buff_U, ldim_U, 
-      0, n_A, n_A, buff_V, ldim_V, 
-      64, 0, 2 );
+      0, n_A, n_A, buff_V, ldim_V,
+	  & upper_T_norm,
+      2, 0, 2 );
       //// 64, 10, 2 );
   printf( "%% Just after computing factorization.\n" );
 
@@ -128,6 +130,8 @@ int main( int argc, char *argv[] ) {
 
   printf( "|| A - U * T * V' || = %e \n", err );
 
+  // print bound on estimate error
+  printf( "|| U ||_F = %e \n", upper_T_norm );
 
 #endif
 

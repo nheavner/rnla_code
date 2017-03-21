@@ -38,6 +38,8 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <mkl.h>
 #include "compute_nuc_norm.h"
 
 // ============================================================================
@@ -124,6 +126,7 @@ int compute_nuc_norm(
         int m_A, int n_A, double * buff_A, int ldim_A,
         int build_u, int m_U, int n_U, double * buff_U, int ldim_U,
         int build_v, int m_V, int n_V, double * buff_V, int ldim_V,
+		double * upper_T_norm,
         int nb_alg, int pp, int n_iter ) {
 //
 // randUTV: It computes the UTV factorization of matrix A.
@@ -163,18 +166,20 @@ int compute_nuc_norm(
 //
   // Declaration of variables.
   double  d_one = 1.0, d_zero = 0.0;
-  char    all = 'A', t = 'T', n = 'N';
+  char    all = 'A', t = 'T', n = 'N', f = 'F';
   double  * buff_G, * buff_Y, * buff_S1, * buff_S2,
           * buff_SU, * buff_sv, * buff_SVT,
           * buff_SUtl, * buff_svl, * buff_SVTtl,
           * buff_A11, * buff_ABR, * buff_AB1, * buff_AB2, * buff_A22,
-          * buff_A01, * buff_A12,
+          * buff_A01, * buff_A12, * buff_A23,
           * buff_GBl, * buff_YBl, * buff_S1tl, * buff_S2tl,
           * buff_BR, * buff_C1, * buff_D1, * buff_CR, * buff_DR;
   int     i, j, bRow, mn_A;
   int     ldim_Y, ldim_G, ldim_S1, ldim_S2, ldim_SU, ldim_SVT, ldim_SA;
-  int     m_YBl, n_YBl, m_GBl, n_GBl, m_CR, n_CR, m_AB1, n_AB1, m_AB2, n_AB2,
-          m_A22, n_A22, m_WR, n_WR, m_XR, n_XR;
+  MKL_INT     m_YBl, n_YBl, m_GBl, n_GBl, m_CR, n_CR, m_AB1, n_AB1, m_AB2, n_AB2,
+          m_A22, n_A22, m_A23, n_A23, m_WR, n_WR, m_XR, n_XR;
+
+
 #ifdef PROFILE
   double  t1, t2, tt_by,
           tt_qr1_fact, tt_qr1_updt_a, tt_qr1_updt_v,
@@ -240,6 +245,8 @@ int compute_nuc_norm(
   buff_svl   = & buff_sv[ 0 ];
   buff_SVTtl = & buff_SVT[ 0 + 0 * ldim_SVT ];
 
+  * upper_T_norm = 0.0;
+
   // %%% Initialize U and V and copy A onto T.
   // U = eye(m);
   // V = eye(n);
@@ -275,7 +282,10 @@ int compute_nuc_norm(
     n_XR  = n_V - i;
 	m_A22 = m_A - i;
 	n_A22 = n_A - i;
+	m_A23 = bRow;
+	n_A23 = max( n_A - nb_alg - i, 0 );
 
+	buff_A23 = & buff_A[ min(i + (i+bRow)*ldim_A, m_A*n_A - 1) ];
     buff_A22  = & buff_A[ i + i * ldim_A ];
     buff_A11  = & buff_A[ i + i * ldim_A ];
     buff_ABR  = & buff_A[ i + i * ldim_A ];
@@ -542,6 +552,12 @@ int compute_nuc_norm(
     t2 = FLA_Clock();
     tt_svd_updt_uv += ( t2 - t1 );
 #endif
+
+    //compute portion of Frobenius norm of upper part of T
+	if ( n_A23 > 0 ) {
+	  * upper_T_norm += dlange_( & f, & m_A23, & n_A23,
+					buff_A23, & ldim_A, NULL );
+	}
 
     // End of main loop.
   }

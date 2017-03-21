@@ -28,6 +28,7 @@ int main( int argc, char *argv[] ) {
   char all = 'A', t = 'T', n = 'N', f  = 'F';
   double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
   int i, j;
+  double upper_T_norm = 0.0;
 
   int n_arr[] = {500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000};
 
@@ -93,7 +94,8 @@ int main( int argc, char *argv[] ) {
 	compute_nuc_norm( m_A, n_A, buff_A, ldim_A, 
         0, m_A, m_A, buff_U, ldim_U, 
         0, n_A, n_A, buff_V, ldim_V, 
-        64, 0, 2 );
+		& upper_T_norm,
+		64, 0, 2 );
    
     clock_gettime( CLOCK_MONOTONIC, &ts_end );
     t_proc = (double) ( (ts_end.tv_sec - ts_start.tv_sec)

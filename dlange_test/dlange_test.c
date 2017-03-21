@@ -27,8 +27,8 @@ int main( int argc, char *argv[] ) {
   char f = 'F';
 
   // create matrix A
-  m_A = 2;
-  n_A = 2;
+  m_A = 4;
+  n_A = 4;
   ldim_A = l_max(1,m_A);
   buff_A = ( double * ) malloc( m_A * n_A * sizeof(double) );
   //generate matrix A
