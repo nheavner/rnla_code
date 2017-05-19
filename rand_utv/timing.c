@@ -33,11 +33,11 @@ int main( int argc, char *argv[] ) {
   struct timespec ts_start, ts_end;
   
   FILE * ofp;
-  char * mode = "w";
+  char * mode = "a";
 
-  ofp = fopen( "times.txt", mode );
+  ofp = fopen( "../nuc_norm/times.txt", mode );
 
-  fprintf( ofp, "values of n used in timing: 500,1000,2000,3000,4000,5000,6000,8000,10000 \n" );
+  //fprintf( ofp, "values of n used in timing: 500,1000,2000,3000,4000,5000,6000,8000,10000 \n" );
 
   for ( i=0; i < ( sizeof(n_arr) / sizeof(int) ); i++ ) {
     printf( "%% n = %i: \n", n_arr[ i ] );
@@ -68,8 +68,8 @@ int main( int argc, char *argv[] ) {
     clock_gettime( CLOCK_MONOTONIC, &ts_start );
 
 	NoFLA_UTV_WY_blk_var2( m_A, n_A, buff_A, ldim_A, 
-        1, m_A, m_A, buff_U, ldim_U, 
-        1, n_A, n_A, buff_V, ldim_V, 
+        0, m_A, m_A, buff_U, ldim_U, 
+        0, n_A, n_A, buff_V, ldim_V, 
         64, 0, 2 );
 
 	clock_gettime( CLOCK_MONOTONIC, &ts_end );

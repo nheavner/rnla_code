@@ -38,7 +38,7 @@ int main( int argc, char *argv[] ) {
 
   //for output file
   FILE * ofp;
-  char * mode = "w";
+  char * mode = "a";
 
 #ifdef COMPUTE_SVD
   //for computing SVD
@@ -49,7 +49,7 @@ int main( int argc, char *argv[] ) {
 
   ofp = fopen( "times.txt", mode );
 
-  fprintf( ofp, "values of n used in timing: 500,1000,2000,3000,4000,5000,6000,8000,10000 \n" );
+  //fprintf( ofp, "values of n used in timing: 500,1000,2000,3000,4000,5000,6000,8000,10000 \n" );
 
   for ( i=0; i < ( sizeof(n_arr) / sizeof(int) ); i++ ) {
     printf( "%% n = %i: \n", n_arr[ i ] );
