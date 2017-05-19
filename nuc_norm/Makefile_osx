@@ -6,45 +6,49 @@ LD      = icc # option: gcc-6
 LDFLAGS = -O
 
 # Definitions of rules.
-timing.x : timing.o compute_nuc_norm.o
-	@$(LD)  \
-	-o timing.x  \
-	timing.o \
-	compute_nuc_norm.c \
-    /opt/intel/mkl/lib/libmkl_intel_lp64.a \
-    /opt/intel/mkl/lib/libmkl_intel_thread.a \
-	/opt/intel/mkl/lib/libmkl_core.a \
-	-L/opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib \
-	-liomp5 -lpthread -lm -ldl
-
-	@install_name_tool -change @rpath/libiomp5.dylib /opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib/libiomp5.dylib ./timing.x
-
-timing.o : timing.c
-	@$(CC) $(CCFLAGS) -Wall -c timing.c \
-	-DMKL_LP64 -m64 -I/opt/intel/mkl/include
+#timing.x : timing.o compute_nuc_norm.o
+#	@$(LD)  \
+#	-o timing.x  \
+#	timing.o \
+#	compute_nuc_norm.c \
+#   /opt/intel/mkl/lib/libmkl_intel_lp64.a \
+#    /opt/intel/mkl/lib/libmkl_intel_thread.a \
+#	/opt/intel/mkl/lib/libmkl_core.a \
+#	-L/opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib \
+#	-liomp5 -lpthread -lm -ldl
+#
+#	@install_name_tool -change @rpath/libiomp5.dylib /opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib/libiomp5.dylib ./timing.x
+#
+#timing.o : timing.c
+#	@$(CC) $(CCFLAGS) -Wall -c timing.c \
+#	-DMKL_LP64 -m64 -I/opt/intel/mkl/include
 
 simple_test.x : simple_test.o compute_nuc_norm.o
 	@$(LD)  \
 	-o simple_test.x \
 	simple_test.o \
 	compute_nuc_norm.o \
-	/opt/intel/mkl/lib/libmkl_intel_lp64.a \
+	/opt/intel/mkl/lib/libmkl_intel_ilp64.a \
 	/opt/intel/mkl/lib/libmkl_intel_thread.a \
 	/opt/intel/mkl/lib/libmkl_core.a \
 	-L/opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib \
 	-liomp5 -lpthread -lm -ldl
 
-	@install_name_tool -change @rpath/libiomp5.dylib /opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib/libiomp5.dylib ./simple_test.x
+	install_name_tool -change @rpath/libiomp5.dylib /opt/intel/compilers_and_libraries_2017.2.163/mac/compiler/lib/libiomp5.dylib ./simple_test.x
 
 simple_test.o : simple_test.c
-	@$(CC) $(CCFLAGS) -Wall -c simple_test.c \
-	-DMKL_LP64 -m64 -I/opt/intel/mkl/include
+	@$(CC) -Wall -c simple_test.c \
+	-DMKL_ILP64 -m64 -I/opt/intel/mkl/include
 
-%.o : %.c
-	$(CC) $(CCFLAGS) -c $< -o $@ \
-	-DMKL_LP64 -m64 -I/opt/intel/mkl/include
+compute_nuc_norm.o : compute_nuc_norm.c
+	$(CC) -Wall -c compute_nuc_norm.c -DMKL_ILP64 -m64 -I/opt/intel/mkl/include
+
+#%.o : %.c
+#	$(CC) $(CCFLAGS) -c $< -o $@ \
+#	-DMKL_ILP64 -m64 -I/opt/intel/mkl/include
 
 clean : FORCE
 	rm -f a.out *.x *.o *~ core
 
 FORCE :
+	
