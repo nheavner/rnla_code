@@ -23,8 +23,8 @@ int main( int argc, char *argv[] ) {
   double  * buff_A, * buff_U, * buff_V;
 
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 10000;
-  n_A      = 10000;
+  m_A      = 100;
+  n_A      = 100;
   mn_A     = min( m_A, n_A );
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
