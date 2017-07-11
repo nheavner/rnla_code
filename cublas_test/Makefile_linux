@@ -1,0 +1,16 @@
+# Definitions of variables
+
+CC      = nvcc
+CCFLAGS = -lcublas
+
+# Definitions of rules
+cublas_test.x : cublas_test.cu
+	@$(CC) \
+	cublas_test.cu \
+	$(CCFLAGS) \
+	-o cublas_test.x
+
+clean : FORCE
+	rm -f a.out *.x *.o *~ core
+
+FORCE :
