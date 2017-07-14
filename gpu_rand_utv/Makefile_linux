@@ -1,16 +1,25 @@
 # Definitions of variables
 
 CC      = nvcc
-CCFLAGS = -lcublas
+CCFLAGS = -O
+LD		= nvcc
+LDFLAGS = -O
 
 # Definitions of rules
-cublas_test.x : cublas_test.cu
-	@$(CC) \
-	cublas_test.cu \
-	$(CCFLAGS) \
-	-o cublas_test.x
+simple_test.x : simple_test.o rand_utv_gpu.o 
+	@$(LD) \
+	-o simple_test.x \
+	simple_test.o \
+	rand_utv_gpu.cu \
+	-lcublas
+
+simple_test.o : simple_test.cu
+	@$(CC) -c simple_test.cu
+
+%.o : %.cu
+	@$(CC) $(CCFLAGS) -c $< -o $@
 
 clean : FORCE
-	rm -f a.out *.x *.o *~ core
+	rm -f a.out *.o *~ core
 
 FORCE :
