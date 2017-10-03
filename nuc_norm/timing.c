@@ -83,7 +83,7 @@ int main( int argc, char *argv[] ) {
     for ( j=0; j < m_A*n_A; j++ ){
       buff_Acp[ j ] = buff_A[ j ];
     }
-#endif
+endif
 
     // Factorize matrix.
     printf( "%% Just before computing factorization.\n" );

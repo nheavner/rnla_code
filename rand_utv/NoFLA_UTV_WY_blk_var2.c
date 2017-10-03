@@ -889,7 +889,7 @@ static int NoFLA_QRP_WY_unb_var2( int pivoting, int num_stages,
 // "numstages": It tells the number of columns that are factorized.
 //   If "num_stages" is negative, the whole matrix A is factorized.
 //   If "num_stages" is positive, only the first "num_stages" are factorized.
-//
+//https://www.google.com://www.google.com//
   int     j, mn_A, m_a21, m_A22, n_A22, n_dB, idx_max_col,
           i_one = 1, n_house_vector, m_rest;
   double  * buff_d, * buff_e, * buff_workspace, * buff_t, diag;
