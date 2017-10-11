@@ -14,6 +14,8 @@
 // ============================================================================
 // Declaration of local prototypes.
 
+static void matrix_generate_ooc( int m_A, int n_A, char * A_fname );
+
 static void matrix_generate( int m_A, int n_A, double * buff_A, int ldim_A );
 
 static void print_double_matrix( char * name, int m_A, int n_A, 
@@ -33,12 +35,15 @@ int main( int argc, char *argv[] ) {
   int     nb_alg, pp, m_A, n_A, mn_A, ldim_A, ldim_Q, info, lwork;
   double  * buff_A, * buff_tau, * buff_Q, * buff_wk_qp4, * buff_wk_orgqr;
   int     * buff_p;
+  FILE	  * A_fp; // pointer to the file that stores A
+  char    A_fname[] = "A_mat";
+  size_t  read_check;
 
   // Create matrix A, vector p, vector s, and matrix Q.
-  m_A      = 7;
-  n_A      = 5;
-  nb_alg   = 2;
-  pp	   = 2;
+  m_A      = 10;
+  n_A      = 8;
+  nb_alg   = 3;
+  pp	   = 0;
   mn_A     = min( m_A, n_A );
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   ldim_A   = max( 1, m_A );
@@ -50,8 +55,19 @@ int main( int argc, char *argv[] ) {
   buff_Q   = ( double * ) malloc( m_A * mn_A * sizeof( double ) );
   ldim_Q   = max( 1, m_A );
 
-  // Generate matrix.
-  matrix_generate( m_A, n_A, buff_A, ldim_A );
+  // Generate binary file which stores the matrix (out of core)
+  matrix_generate_ooc( m_A, n_A, A_fname ); 
+  A_fp = fopen( A_fname, "r" );
+
+  // transfer matrix to in-core TODO: remove this once building/debugging is complete
+  read_check = fread( buff_A, sizeof( double ), m_A * n_A, A_fp );
+  if ( read_check != m_A * n_A ) {
+    printf( "Warning! file read failed \n" );
+	return 1;
+  }
+
+  fseek( A_fp, 0, SEEK_SET );
+
 
 #ifdef PRINT_DATA
   print_double_matrix( "ai", m_A, n_A, buff_A, ldim_A );
@@ -76,7 +92,7 @@ int main( int argc, char *argv[] ) {
   // Factorize matrix.
   printf( "%% Just before computing factorization.\n" );
   // New factorization.
-  hqrrp_ooc( m_A, n_A, buff_A, ldim_A, buff_p, buff_tau, 
+  hqrrp_ooc( A_fname, m_A, n_A, buff_A, ldim_A, buff_p, buff_tau, 
            nb_alg, pp, 1 );
   // Current factorization.
   // dgeqp3_( & m_A, & n_A, buff_A, & ldim_A, buff_p, buff_tau, 
@@ -108,6 +124,10 @@ int main( int argc, char *argv[] ) {
   print_double_matrix( "qf", m_A, mn_A, buff_Q, ldim_Q );
 #endif
 
+  // remove file that stored matrix
+  fclose( A_fp );
+  remove( A_fname );
+
   // Free matrices and vectors.
   free( buff_A );
   free( buff_p );
@@ -117,6 +137,37 @@ int main( int argc, char *argv[] ) {
   printf( "%% End of Program\n" );
 
   return 0;
+}
+
+// ============================================================================
+static void matrix_generate_ooc( int m_A, int n_A, char * A_fname ) {
+  // populate the empty file pointed to by A_fp with a matrix
+  // with random values 
+
+  FILE * A_fp;
+  double * col_p; // for storing one col at a time before transferring to disk
+  int i,j;
+
+
+  A_fp = fopen( A_fname, "w" );
+  col_p = ( double * ) malloc( m_A * sizeof( double ) );
+
+  srand( 10 );
+
+  // create matrix one col at a time and write to disk
+  for ( j=0; j < n_A; j++ ) {
+    for ( i=0; i < m_A; i++ ) {
+	  col_p[ i ] = ( double ) rand() / ( double ) RAND_MAX; 
+	}
+	fwrite( col_p, sizeof( double ), m_A , A_fp );
+  }
+
+
+  fclose( A_fp );
+
+  // free memory
+  free(col_p);
+
 }
 
 // ============================================================================

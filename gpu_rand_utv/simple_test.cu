@@ -25,18 +25,24 @@ static void print_double_matrix( char * name, int m_A, int n_A,
 int main() {
   int     bl_size, pp, q_iter, m_A, n_A, mn_A, ldim_A, ldim_U, ldim_V;
   double  * buff_A, * buff_U, * buff_V, * buff_UT;
-  double * buff_Ac;
+  double * buff_Ac, * buff_Acc;
+  double * buff_ss;
 
   int i;
   double err, norm_A;
   char t = 'T', n = 'N', f = 'F';
   double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
 
+  double * buff_work;
+  int    * buff_iwork;
+  int    lwork;
+  int    info;
+
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 10000;
-  n_A      = 10000;
-  bl_size = 128;
-  q_iter = 1;
+  m_A      = 1000;
+  n_A      = 1000;
+  bl_size =  128;
+  q_iter = 10;
   mn_A     = min( m_A, n_A );
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
@@ -49,7 +55,16 @@ int main() {
   ldim_V   = max( 1, n_A );
 
   buff_Ac  = ( double * ) malloc( m_A * n_A * sizeof( double ) );
+  buff_Acc = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   buff_UT  = ( double * ) malloc( m_A * n_A * sizeof( double ) );
+
+  buff_ss  = ( double * ) malloc( min( m_A, n_A ) * sizeof( double ) );
+
+  // allocate memory for work arrays
+  lwork = 3 * min( m_A, n_A ) + max( max( m_A, n_A ), 7 * min( m_A, n_A ) );
+
+  buff_work = ( double * ) malloc( lwork * sizeof( double ) );
+  buff_iwork = ( int * ) malloc( 8 * min( m_A, n_A ) * sizeof( int ) );
 
   // Generate matrix.
   matrix_generate( m_A, n_A, buff_A, ldim_A );
@@ -57,6 +72,10 @@ int main() {
   // copy data to later check error
   for ( i=0; i < m_A * n_A; i++ ) {
     buff_Ac[ i ] = buff_A[ i ];
+  }
+  
+  for ( i=0; i < m_A * n_A; i++ ) {
+    buff_Acc[ i ] = buff_A[ i ];
   }
 
 #ifdef PRINT_DATA
@@ -106,12 +125,47 @@ int main() {
 
   printf( "%% || A - U * T * V' ||_F / || A ||_F = %e \n", err / norm_A );
 
+  // check how far away T is from being diagonal
+
+    // compute singular values of A
+	dgesdd( & n, 
+			& m_A, & n_A, buff_Acc, & ldim_A,
+		    buff_ss,
+			NULL, & m_A,
+			NULL, & n_A,
+			buff_work, & lwork, buff_iwork, & info );
+
+    // compute SIGMA - T
+    for ( i=0; i < min( m_A, n_A ); i++ ) {
+	  buff_A[ i + i * ldim_A ] = buff_A[ i + i * ldim_A ] - buff_ss[ i ];  
+	}
+
+	// compute || SIGMA - T ||
+	err = dlange( & f, & m_A, & n_A,
+			buff_A, & m_A, NULL );
+	
+  printf( "%% || D - T ||_F / || A ||_F = %e \n", err / norm_A );
+
+  // compute the error in the singular value estimates vs the singular values
+  err = 0.0;
+  for ( i=0; i < min( m_A, n_A ); i++ ) {
+    err += buff_A[ i + i * ldim_A ] * buff_A[ i + i * ldim_A ]; 
+  }
+  err = sqrt( err );
+
+  printf( "%% || diag(D) - diag(T) || = %e \n", err );
+
   // Free matrices and vectors.
   free( buff_A );
   free( buff_U );
   free( buff_V );
   free( buff_Ac );
+  free( buff_Acc );
   free( buff_UT );
+  free( buff_ss );
+
+  free( buff_work );
+  free( buff_iwork );
 
   printf( "%% End of Program\n" );
 
