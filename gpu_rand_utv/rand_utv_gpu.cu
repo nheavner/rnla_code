@@ -95,6 +95,10 @@ static void local_magqr_nopiv( int m_A, int n_A,
 				double * A_pg, int ldim_A,
 				double * tau_h, magma_int_t * magInfo );
 
+static void gpu_orth( int m_A, int n_A, double * A_pg, int ldim_A,
+				double * tau_h, double * T_d,
+				magma_int_t * magInfo );
+
 static void local_magormqr( magma_side_t mag_side, magma_trans_t mag_trans,
 				int m_C, int n_C, double * C_pg, int ldim_C,
 				int m_A, int n_A, double * A_pg, int ldim_A,
@@ -128,6 +132,9 @@ static void local_magsvd( int m_A, int n_A, double * A_pg, int ldim_A,
                 double * ss_pg,
                 double * U_pg, int ldim_U,
                 double * Vt_pg, int ldim_Vt,
+				double * work_h, int * iwork_h );
+
+static void local_left_svecs( int m_A, int n_A, double * A_pg, int ldim_A,
 				double * work_h, int * iwork_h );
 
 static void gpu_dgesvd( cusolverDnHandle_t handle,
@@ -225,7 +232,7 @@ int rand_utv_gpu(
 		int m_A, int n_A, double * A_pc, int ldim_A,
 		int build_U, int m_U, int n_U, double * U_pc, int ldim_U,
 		int build_V, int m_V, int n_V, double * V_pc, int ldim_V,
-		int bl_size, int pp, int q_iter ) {
+		int bl_size, int pp, int q_iter, int ON ) {
 
 // randUTV: It computes the (rank-revealing) UTV factorization of matrix A.
 //
@@ -252,6 +259,8 @@ int rand_utv_gpu(
 // bl_size:   Block size. Usual values for nb_alg are 32, 64, etc.
 // pp:       Oversampling size. Usual values for pp are 5, 10, etc.
 // q_iter:   Number of "power" iterations. Usual values are 2.
+// ON:		If ON==1, orthonormalization is used in power iteration
+
 
   // Declaration of variables
   double d_one = 1.0;
@@ -395,7 +404,6 @@ int rand_utv_gpu(
   assert( cudaStat == cudaSuccess );
   cudaStat = cudaMalloc( & G_pg, m_G * n_G * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
-  
   cudaStat = cudaMalloc( & Y_pg, m_Y * n_Y * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
 
@@ -410,7 +418,7 @@ int rand_utv_gpu(
   assert( cudaStat == cudaSuccess );
   cudaStat = cudaMalloc( & TVt_pg, m_A * bl_size * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
-  cudaStat = cudaMalloc( & ss_pg, bl_size * sizeof( double ) );
+  cudaStat = cudaMalloc( & ss_pg, ( bl_size + pp ) * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
 
   cudaStat = cudaMalloc( & Tmp_pg, m_A * bl_size * sizeof( double ) );
@@ -419,7 +427,7 @@ int rand_utv_gpu(
   Allocate_work_array( cusolverH, 
 				& work_pg, 
 				m_A, n_A, A_pg, ldim_A,
-				bl_size );
+				bl_size + pp );
 
   cudaMalloc( ( void ** ) & devInfo, sizeof( int ) );
   
@@ -429,21 +437,22 @@ int rand_utv_gpu(
   // allocate memory for the arrays
   mx_A = max( m_A, n_A ); mn_A = min( m_A, n_A );
   work_nb_svd = magma_get_dgesvd_nb( bl_size, bl_size );
-  work_nb_qr = magma_get_dgeqrf_nb( m_A, bl_size );
-  lwork_mx = max((m_A-bl_size+work_nb_qr)*(n_A+work_nb_qr)+n_A*work_nb_qr,(n_A-bl_size+work_nb_qr)*(m_A+work_nb_qr)+m_A*work_nb_qr);
-  lwork_mx = max( lwork_mx,3*bl_size + max(3*bl_size*bl_size+4*bl_size,2*bl_size*work_nb_svd) );
+  work_nb_qr = magma_get_dgeqrf_nb( m_A, bl_size + pp );
+  lwork_mx = max((m_A-(bl_size+pp)+work_nb_qr)*(n_A+work_nb_qr)+n_A*work_nb_qr,(n_A-(bl_size+pp)+work_nb_qr)*(m_A+work_nb_qr)+m_A*work_nb_qr);
+  lwork_mx = max( lwork_mx,3*(bl_size+pp) + max(3*(bl_size+pp)*(bl_size+pp)+4*(bl_size+pp),2*(bl_size+pp)*work_nb_svd) );
+  lwork_mx = max( lwork_mx, (bl_size + pp)*(bl_size + pp)+3*(bl_size+pp)+max(3*(bl_size+pp)*(bl_size+pp)+4*(bl_size+pp),2*(bl_size+pp)*magma_get_sgesvd_nb(m_A,bl_size+pp)) );		
 		//TODO: YOU BETTER MOVE THIS CRAP TO AN AUX FUNCTION
 
   magma_dmalloc_pinned( & work_h, lwork_mx );
-  magma_imalloc_pinned( & iwork_h, 8 * bl_size );
+  magma_imalloc_pinned( & iwork_h, 8 * ( bl_size + pp ) );
 
   magInfo = ( magma_int_t * ) malloc( sizeof( magma_int_t ) );
 
   // determine max size of work arrays for magma qr calcs
   // and allocate memory for the arrays
   cudaMalloc( ( void ** ) & T_d, 
-			(2*mn_A+ceil(n_A/32.0)*32)*magma_get_dgeqrf_nb( m_A, bl_size ) * sizeof( double ) );
-  tau_h = ( double * ) malloc( bl_size * sizeof( double ) );
+			(2*mn_A+ceil(n_A/32.0)*32)*magma_get_dgeqrf_nb( m_A, (bl_size+pp) ) * sizeof( double ));
+  tau_h = ( double * ) malloc( ( bl_size + pp ) * sizeof( double ) );
 
   // copy A to gpu
   cudaMemcpy( A_pg, A_pc, m_A * n_A * sizeof( double ),
@@ -531,12 +540,19 @@ int rand_utv_gpu(
 					m_G_loc, n_G_loc, G_loc_pg, ldim_G,
 					d_zero,
 					m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y );
-
+	
 	// perform "power iteration" if requested
 	// for i_iter = 1:q_iter:
 	//   Y = Aloc' * (Aloc * Y);
 	// end
     for( j=0; j<q_iter; j++ ) {
+	 
+	  if ( ON == 1 ) {
+		gpu_orth( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+				  tau_h, T_d,
+				  magInfo );
+	  }
+
 	  // reuse G_loc for storage; G <-- A*Y
 	  gpu_dgemm( cublasH, 
 					n, n, d_one,
@@ -552,6 +568,15 @@ int rand_utv_gpu(
 					m_G_loc, n_G_loc, G_loc_pg, ldim_G,
 					d_zero,
 					m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y );
+	}
+
+	// if oversampling is done, extract the basis basis of bl_size vectors
+	if ( pp > 0 ) {
+	  // compute left singular vectors of sampling matrix; use first bl_size 
+	  // vectors as new sampling matrix to compute left transformation
+	  local_left_svecs( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+				work_h, iwork_h );
+	  
 	}
 
 // TODO: clean up the timing code
@@ -571,7 +596,7 @@ int rand_utv_gpu(
     //   [Vloc,~]   = LOCAL_nonpiv_QR(Y,b);
     // end
 
-	local_magqr_nopiv( m_Y_loc, n_Y_loc, 
+	local_magqr_nopiv( m_Y_loc, n_Y_loc-pp, 
 				Y_loc_pg, ldim_Y,
 				tau_h, magInfo ); 
 
@@ -581,7 +606,7 @@ int rand_utv_gpu(
 	//				work_pg, devInfo );
     
 	// construct "TU'" matrix for UT representation of HH matrix
-	magma_dlarft( cublasH, m_Y_loc, n_Y_loc, 
+	magma_dlarft( cublasH, m_Y_loc, n_Y_loc-pp, 
 				Y_loc_pg, ldim_Y,
 				tau_h,
 				T_pg, ldim_T,
@@ -610,7 +635,7 @@ int rand_utv_gpu(
 
     my_dormqr_gpu( cublasH,
 					r, n, 
-					m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+					m_Y_loc, n_Y_loc-pp, Y_loc_pg, ldim_Y,
 					m_A_right, n_A_right, A_right_pg, ldim_A,
 					TVt_pg, ldim_TVt,
 					work_pg );
@@ -626,7 +651,7 @@ int rand_utv_gpu(
     // Update matrix V with transformations from the first QR.
 	my_dormqr_gpu( cublasH,
 					r,n,
-					m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+					m_Y_loc, n_Y_loc-pp, Y_loc_pg, ldim_Y,
 					m_V_right, n_V_right, V_right_pg, ldim_V,
 					TVt_pg, ldim_TVt,
 					work_pg );
@@ -997,6 +1022,39 @@ static void local_magormqr( magma_side_t mag_side, magma_trans_t mag_trans,
 			work_h, lwork, T_d, nb, magInfo );
 
 }
+// ========================================================================
+static void gpu_orth( int m_A, int n_A, double * A_pg, int ldim_A,
+				double * tau_h, double * T_d,
+				magma_int_t * magInfo ) {
+  // given an m_A x n_A matrix A, calculates a matrix Q with ON columns
+  // such that A and Q share the same column space; Q overwrites A
+
+  int nb;
+
+  // get block size to use as input later
+  nb = magma_get_dgeqrf_nb( m_A, n_A );
+
+  if ( m_A >= n_A ) {
+	// compute QR fact, get HH reflectors
+	magma_dgeqrf_gpu( m_A, n_A, A_pg, ldim_A,
+				  tau_h, T_d, magInfo );
+
+	// form Q
+	magma_dorgqr_gpu( m_A, n_A, n_A, A_pg, ldim_A,
+				  tau_h, T_d, 
+				  nb, magInfo );
+  }
+  else {
+	// compute QR fact, get HH reflectors
+	magma_dgeqrf_gpu( m_A, m_A, A_pg, ldim_A,
+				  tau_h, T_d, magInfo );
+
+	// form Q
+	magma_dorgqr_gpu( m_A, m_A, m_A, A_pg, ldim_A,
+				  tau_h, T_d, 
+				  nb, magInfo );
+  }
+}
 
 // ========================================================================
 static void gpu_dgeqrf( cusolverDnHandle_t handle,
@@ -1142,6 +1200,71 @@ static void local_magsvd( int m_A, int n_A, double * A_pg, int ldim_A,
 
   // set contents of A_pg to zeros with svs on diagonal
   Set_ss_diag_mat( m_A, n_A, A_pg, ldim_A, ss_pg );
+
+  // free memory
+  free( A_p );
+  free( U_p );
+  free( Vt_p );
+  free( ss_p );
+
+  free( magInfo );
+
+}
+
+// ========================================================================
+static void local_left_svecs( int m_A, int n_A, double * A_pg, int ldim_A,
+				double * work_h, int * iwork_h ) {
+  // given an m_A x n_A matrix A stored in device memory in A_pg,
+  // this function returns the first min(m_A,n_A) left singular
+  // vectors in the first min(m_A,n_A) columns of A
+
+  // declare and initialize auxiliary variables
+
+  double * ss_p;
+  double * A_p, * U_p, * Vt_p;
+
+  int lwork = 0; // size of work buffer
+  magma_int_t * magInfo = NULL; // stored on host 
+
+  // vars for determining size of work array
+  int nb = magma_get_dgesvd_nb( m_A, n_A );
+  int A_mx, A_mn;
+
+  // get max and min
+  A_mx = max( m_A, n_A );
+  A_mn = min( m_A, n_A );
+
+  // allocate space for devInfo on device
+  magInfo = ( magma_int_t * ) malloc( sizeof( magma_int_t ) );
+
+  // arrays must be in host memory for magma svd
+  A_p = ( double * ) malloc( m_A * n_A * sizeof( double ) );
+  U_p = ( double * ) malloc( m_A * m_A * sizeof( double ) );
+  Vt_p = ( double * ) malloc( n_A * n_A * sizeof( double ) );
+  ss_p = ( double * ) malloc( A_mn * sizeof( double ) );
+
+  magma_dgetmatrix( m_A, n_A, A_pg, ldim_A, A_p, m_A );
+
+  // determine size of work array
+  magma_dgesdd( MagmaSomeVec,
+				m_A, n_A, A_p, ldim_A,
+				ss_p,
+				U_p, m_A,
+				Vt_p, n_A,
+				work_h, -1, iwork_h, magInfo );
+
+  lwork = work_h[ 0 ];
+
+  // compute factorization
+  magma_dgesdd( MagmaSomeVec,
+                m_A, n_A, A_p, m_A,
+                ss_p,
+                U_p, m_A,
+                Vt_p, n_A,
+                work_h, lwork, iwork_h, magInfo );
+
+  // transfer results back to device
+  magma_dsetmatrix( m_A, A_mn, U_p, m_A, A_pg, ldim_A );
 
   // free memory
   free( A_p );

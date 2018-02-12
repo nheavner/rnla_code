@@ -23,7 +23,7 @@ static void print_double_matrix( char * name, int m_A, int n_A,
 
 // ============================================================================
 int main() {
-  int     bl_size, pp, q_iter, m_A, n_A, mn_A, ldim_A, ldim_U, ldim_V;
+  int     bl_size, pp, q_iter, ON, m_A, n_A, mn_A, ldim_A, ldim_U, ldim_V;
   double  * buff_A, * buff_U, * buff_V, * buff_UT;
   double * buff_Ac, * buff_Acc;
   double * buff_ss;
@@ -39,10 +39,12 @@ int main() {
   int    info;
 
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 1000;
+  m_A      = 2000;
   n_A      = 1000;
   bl_size =  128;
-  q_iter = 10;
+  q_iter = 2;
+  pp = 10;
+  ON = 1;
   mn_A     = min( m_A, n_A );
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
@@ -90,8 +92,8 @@ int main() {
   rand_utv_gpu( m_A, n_A, buff_A, ldim_A, 
       1, m_A, m_A, buff_U, ldim_U, 
       1, n_A, n_A, buff_V, ldim_V, 
-      bl_size, 0, q_iter );
-      //// 64, 10, 2 );
+      bl_size, pp, q_iter, ON );
+      //// 64, 10, 2, 1 );
   printf( "%% Just after computing factorization.\n" );
 
   // Print results.

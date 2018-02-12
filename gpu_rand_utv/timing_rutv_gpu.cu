@@ -30,6 +30,8 @@ int main() {
   int bl_size = 128;
   int n_A[] = {1000,2000,3000,4000,5000,6000,8000,10000,12000};
   int q[] = {0,1,2};
+  int p = 128;
+  int ON = 1;
 
   // for timing
   timespec t1, t2;
@@ -68,7 +70,7 @@ int main() {
 		  rand_utv_gpu( n_A[i], n_A[i], buff_A, ldim_A,
 						1, n_A[i], n_A[i], buff_U, n_A[i],
 						1, n_A[i], n_A[i], buff_V, n_A[i],
-						bl_size, 0, q[j] );
+						bl_size, p, q[j], ON );
 		  
 		  // stop timing and record time
 		  cudaDeviceSynchronize();
@@ -86,7 +88,7 @@ int main() {
   }
 
   // write results to file
-  ofp = fopen( "times_rutv_gpu.m", & mode );
+  ofp = fopen( "times_rutv_gpu_OS_ON.m", & mode );
 
 	fprintf( ofp, "%% block size was %d \n \n", bl_size );
 

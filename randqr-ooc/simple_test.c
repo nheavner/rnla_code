@@ -1,15 +1,18 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 
+#include <time.h>
 #include <mkl.h>
 #include "hqrrp_ooc.h"
+#include "NoFLA_HQRRP_WY_blk_var4.h"
 
 #define max( a, b ) ( (a) > (b) ? (a) : (b) )
 #define min( a, b ) ( (a) < (b) ? (a) : (b) )
 
-#define PRINT_DATA
-
+//#define PRINT_DATA
+#define CHECK_OOC
 
 // ============================================================================
 // Declaration of local prototypes.
@@ -34,23 +37,37 @@ static void set_pvt_to_zero( int n_p, int * buff_p );
 int main( int argc, char *argv[] ) {
   int     nb_alg, pp, m_A, n_A, mn_A, ldim_A, ldim_Q, info, lwork;
   double  * buff_A, * buff_tau, * buff_Q, * buff_wk_qp4, * buff_wk_orgqr;
+  double  * buff_Ac, * buff_tauc;
   int     * buff_p;
+  int     * buff_pc;
   FILE	  * A_fp; // pointer to the file that stores A
-  char    A_fname[] = "A_mat";
+  char    A_fname[] = "./A_mat";//"/media/hdd/A_mat";
   size_t  read_check;
+  int     eq_check = 1;
+  int i;
+
+  struct timespec t1, t2;
+  uint64_t diff;
+  double t_ooc_fact = 0.0;
 
   // Create matrix A, vector p, vector s, and matrix Q.
-  m_A      = 10;
-  n_A      = 8;
-  nb_alg   = 3;
+  m_A      = 20000;
+  n_A      = 20000;
+  nb_alg   = 128;
   pp	   = 0;
   mn_A     = min( m_A, n_A );
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   ldim_A   = max( 1, m_A );
 
+  buff_Ac  = ( double * ) malloc( m_A * n_A * sizeof( double ) );
+
   buff_p   = ( int * ) malloc( n_A * sizeof( int ) );
 
+  buff_pc   = ( int * ) malloc( n_A * sizeof( int ) );
+
   buff_tau = ( double * ) malloc( n_A * sizeof( double ) );
+
+  buff_tauc = ( double * ) malloc( n_A * sizeof( double ) );
 
   buff_Q   = ( double * ) malloc( m_A * mn_A * sizeof( double ) );
   ldim_Q   = max( 1, m_A );
@@ -59,14 +76,16 @@ int main( int argc, char *argv[] ) {
   matrix_generate_ooc( m_A, n_A, A_fname ); 
   A_fp = fopen( A_fname, "r" );
 
-  // transfer matrix to in-core TODO: remove this once building/debugging is complete
+  // transfer matrix to in-core
   read_check = fread( buff_A, sizeof( double ), m_A * n_A, A_fp );
+  fseek( A_fp, 0, SEEK_SET );
+  read_check = fread( buff_Ac, sizeof( double ), m_A * n_A, A_fp );
   if ( read_check != m_A * n_A ) {
     printf( "Warning! file read failed \n" );
 	return 1;
   }
 
-  fseek( A_fp, 0, SEEK_SET );
+  fclose( A_fp );
 
 
 #ifdef PRINT_DATA
@@ -76,11 +95,11 @@ int main( int argc, char *argv[] ) {
 
   // Initialize vector with pivots.
   set_pvt_to_zero( n_A, buff_p );
-  buff_p[ 0 ] = 0;
-  buff_p[ 1 ] = 1;
-  buff_p[ 2 ] = 1;
-  buff_p[ 3 ] = 0;
-  buff_p[ 4 ] = 1;
+  for ( i=0; i < min(m_A,n_A); i++ ) {
+    buff_p[ i ] = i;
+	buff_pc[ i ] = i;
+  }
+
 #ifdef PRINT_DATA
   print_int_vector( "pi", n_A, buff_p );
 #endif
@@ -92,14 +111,22 @@ int main( int argc, char *argv[] ) {
   // Factorize matrix.
   printf( "%% Just before computing factorization.\n" );
   // New factorization.
-  hqrrp_ooc( A_fname, m_A, n_A, buff_A, ldim_A, buff_p, buff_tau, 
-           nb_alg, pp, 1 );
-  // Current factorization.
-  // dgeqp3_( & m_A, & n_A, buff_A, & ldim_A, buff_p, buff_tau, 
-  //          buff_wk_qp4, & lwork, & info );
-  printf( "%% Just after computing factorization.\n" );
 
-  printf( "%% Info after factorization:      %d \n", info );
+  clock_gettime( CLOCK_MONOTONIC, & t1 );
+
+  hqrrp_ooc( A_fname, m_A, n_A, ldim_A, buff_p, buff_tau, 
+           nb_alg, pp, 1 );
+
+  clock_gettime( CLOCK_MONOTONIC, & t2 );
+  diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
+  t_ooc_fact += ( double ) diff / (1E9);
+
+  // Current factorization.
+  NoFLA_HQRRP_WY_blk_var4( m_A, n_A, buff_Ac, ldim_A,
+				buff_pc, buff_tauc, 
+				nb_alg, pp, 1 );
+
+  printf( "%% Just after computing factorization.\n" );
   printf( "%% Work[ 0 ] after factorization: %d \n", ( int ) buff_wk_qp4[ 0 ] );
 
   // Remove workspace.
@@ -116,16 +143,50 @@ int main( int argc, char *argv[] ) {
   }
   free( buff_wk_orgqr );
 
+  // check whether OOC gets same results as in core
+#ifdef CHECK_OOC
+  A_fp = fopen( A_fname, "r" );
+  for ( i=0; i < n_A; i++ ) {
+    fseek( A_fp, ( 0 + ( buff_p[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
+    fread( & buff_A[ 0 + i * ldim_A ], sizeof( double ), m_A, A_fp );
+  }
+  fclose( A_fp );
+
+  for ( i=0; i < m_A * n_A; i++ ) {
+    if ( abs( buff_A[ i ] - buff_Ac[ i ] ) > ( 1E-12 ) ) eq_check = 0; 
+  }
+
+  if ( eq_check == 1 ) {
+    printf( "Success! in-core and out-of-core versions give the same result \n" );
+  }
+  else {
+    printf( "Failure! in-core and out-of-core versions give different results! \n" );
+  }
+
+#endif
+
+  // print out time required for ooc factorization
+  printf( "Time required for hqrrp_ooc: %le\n", t_ooc_fact );
+
+
   // Print results.
 #ifdef PRINT_DATA
+  A_fp = fopen( A_fname, "r" );
+  for ( i=0; i < n_A; i++ ) {
+    fseek( A_fp, ( 0 + ( buff_p[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
+    fread( & buff_A[ 0 + i * ldim_A ], sizeof( double ), m_A, A_fp );
+  }
+  fclose( A_fp );
+
   print_double_matrix( "af", m_A, n_A, buff_A, ldim_A );
+  print_double_matrix( "af2", m_A, n_A, buff_Ac, ldim_A );
   print_int_vector( "pf", n_A, buff_p );
+  print_int_vector( "pf2", n_A, buff_pc );
   print_double_vector( "tauf", n_A, buff_tau );
   print_double_matrix( "qf", m_A, mn_A, buff_Q, ldim_Q );
 #endif
 
   // remove file that stored matrix
-  fclose( A_fp );
   remove( A_fname );
 
   // Free matrices and vectors.
@@ -133,6 +194,10 @@ int main( int argc, char *argv[] ) {
   free( buff_p );
   free( buff_tau );
   free( buff_Q );
+
+  free( buff_Ac );
+  free( buff_pc );
+  free( buff_tauc );
 
   printf( "%% End of Program\n" );
 

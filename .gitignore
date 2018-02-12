@@ -1,3 +1,5 @@
 *.o
 *.x
 *.txt
+*.fig
+*.png
