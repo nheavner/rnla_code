@@ -32,9 +32,9 @@ int main() {
 
   int i, j;
 
-  int bl_size = 512;
+  int bl_size = 128;
   int p = 0;
-  int n_A[] = {20000,50000,70000};//{1000,2000,3000,4000,5000,6000,8000,10000,12000, 15000, 20000, 25000, 30000, 35000, 40000, 50000};
+  int n_A[] = {1000,2000,3000,4000,5000,6000,8000,10000,12000, 15000, 20000, 25000, 30000, 35000, 40000, 50000};
 
   // for timing
   struct timespec t1, t2;
@@ -82,8 +82,8 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do SSD factorization
-		hqrrp_ooc( A_ssd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-					bl_size, p, 1 );
+		//hqrrp_ooc( A_ssd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
+		//			bl_size, p, 1 );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -94,8 +94,8 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do HDD factorization
-		//hqrrp_ooc( A_hdd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-		//  			bl_size, p, 1 );
+		hqrrp_ooc( A_hdd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
+		  			bl_size, p, 1 );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -107,8 +107,8 @@ int main() {
 		
 		// do in-core factorization
 		if ( n_A[ i ] <= 40000 ) {
-		  NoFLA_HQRRP_WY_blk_var4( n_A[i], n_A[i], buff_A, n_A[i], buff_p, buff_tau,
-					bl_size, p, 1 );
+		  //NoFLA_HQRRP_WY_blk_var4( n_A[i], n_A[i], buff_A, n_A[i], buff_p, buff_tau,
+		  //			bl_size, p, 1 );
 		}
 
 		// stop timing and record time

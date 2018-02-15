@@ -524,13 +524,15 @@ int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
   t_tot += t_read + t_write + t_init_Y + t_qr_Y +
 			t_qr_A + t_update_A + t_downdate_Y;
 
-  printf( "%% t_read:          %le    %.2f%%\n", t_read, t_read / t_tot * 100.0 );
-  printf( "%% t_write:         %le    %.2f%%\n", t_write, t_write / t_tot * 100.0 );
-  printf( "%% t_init_Y:        %le    %.2f%%\n", t_init_Y, t_init_Y / t_tot * 100.0 );
-  printf( "%% t_qr_Y:          %le    %.2f%%\n", t_qr_Y, t_qr_Y / t_tot * 100.0 );
-  printf( "%% t_qr_A:          %le    %.2f%%\n", t_qr_A, t_qr_A / t_tot * 100.0 );
-  printf( "%% t_update_A:      %le    %.2f%%\n", t_update_A, t_update_A / t_tot * 100.0 );
-  printf( "%% t_downdate_Y:    %le    %.2f%%\n", t_downdate_Y, t_downdate_Y / t_tot * 100.0 );
+  printf( "%% t_comm:          %le    %.2f%%\n", t_read+t_write, (t_read+t_write) / t_tot * 100.0 );
+  printf( "%%   t_read:          %le    %.2f%%\n", t_read, t_read / t_tot * 100.0 );
+  printf( "%%   t_write:         %le    %.2f%%\n", t_write, t_write / t_tot * 100.0 );
+  printf( "%% t_flop:          %le    %.2f%%\n", t_init_Y+t_qr_Y+t_qr_A+t_update_A+t_downdate_Y, (t_init_Y+t_qr_Y+t_qr_A+t_update_A+t_downdate_Y) / t_tot * 100.0 );
+  printf( "%%   t_init_Y:        %le    %.2f%%\n", t_init_Y, t_init_Y / t_tot * 100.0 );
+  printf( "%%   t_qr_Y:          %le    %.2f%%\n", t_qr_Y, t_qr_Y / t_tot * 100.0 );
+  printf( "%%   t_qr_A:          %le    %.2f%%\n", t_qr_A, t_qr_A / t_tot * 100.0 );
+  printf( "%%   t_update_A:      %le    %.2f%%\n", t_update_A, t_update_A / t_tot * 100.0 );
+  printf( "%%   t_downdate_Y:    %le    %.2f%%\n", t_downdate_Y, t_downdate_Y / t_tot * 100.0 );
   printf( "%% total_time:          %le\n", t_tot );
 #endif
 

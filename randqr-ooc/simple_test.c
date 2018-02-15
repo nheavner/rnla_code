@@ -51,8 +51,8 @@ int main( int argc, char *argv[] ) {
   double t_ooc_fact = 0.0;
 
   // Create matrix A, vector p, vector s, and matrix Q.
-  m_A      = 20000;
-  n_A      = 20000;
+  m_A      = 10000;
+  n_A      = 10000;
   nb_alg   = 128;
   pp	   = 0;
   mn_A     = min( m_A, n_A );
