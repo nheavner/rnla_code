@@ -34,7 +34,7 @@ int main() {
   int bl_size[] = {100,128,256,400,512,600};//{50,100,128,256,512,800,1024};
   int p = 0;
 
-  int n_A = 25000;
+  int n_A = 50000;
   char n_A_str[6];
   sprintf(n_A_str, "%d", n_A );
 
