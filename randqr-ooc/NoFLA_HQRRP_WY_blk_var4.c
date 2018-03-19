@@ -126,7 +126,7 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
 // ============================================================================
 int NoFLA_HQRRP_WY_blk_var4( int m_A, int n_A, double * buff_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-        int nb_alg, int pp, int panel_pivoting ) {
+        int nb_alg, int pp, int k , int panel_pivoting ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
 // This routine is almost compatible with LAPACK's dgeqp3.
@@ -153,6 +153,9 @@ int NoFLA_HQRRP_WY_blk_var4( int m_A, int n_A, double * buff_A, int ldim_A,
 //                 Usual values for nb_alg are 32, 64, etc.
 // pp:             Oversampling size.
 //                 Usual values for pp are 5, 10, etc.
+// k:			   Number of columns to process. 
+//                 If k == n, a full factorization is done.
+//                 If k < n, then floor( k / nb_alg ) columns are processed
 // panel_pivoting: If panel_pivoting==1, QR with pivoting is applied to 
 //                 factorize the panels of matrix A. Otherwise, QR without 
 //                 pivoting is used. Usual value for panel_pivoting is 1.
@@ -234,7 +237,7 @@ int NoFLA_HQRRP_WY_blk_var4( int m_A, int n_A, double * buff_A, int ldim_A,
           & d_zero, buff_Y, & ldim_Y );
 
   // Main Loop.
-  for( j = 0; j < mn_A; j += nb_alg ) {
+  for( j = 0; j < k; j += nb_alg ) {
     b = min( nb_alg, min( n_A - j, m_A - j ) );
 
     // Check whether it is the last iteration.

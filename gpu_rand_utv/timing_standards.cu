@@ -35,7 +35,7 @@ int main() {
 
   int i, j;
 
-  int n_A[] = {1000,2000,3000,4000,5000,6000,8000,10000,12000};
+  int n_A[] = {18000};//{2000,3000,4000,5000,6000,8000,10000,12000};
 
   // for timing
   timespec t1, t2;
@@ -45,7 +45,7 @@ int main() {
 
   // for output file
   FILE * ofp;
-  char mode = 'w';
+  char mode = 'a';
 
   // initialize magma
   magma_init();

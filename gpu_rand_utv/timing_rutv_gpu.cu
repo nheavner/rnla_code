@@ -28,10 +28,9 @@ int main() {
   int i, j;
 
   int bl_size = 128;
-  int n_A[] = {1000,2000,3000,4000,5000,6000,8000,10000,12000};
+  int n_A[] = {18000};//{2000,3000,4000,5000,6000,8000,10000,12000};
   int q[] = {0,1,2};
   int p = 128;
-  int ON = 1;
 
   // for timing
   timespec t1, t2;
@@ -40,7 +39,7 @@ int main() {
 
   // for output file
   FILE * ofp;
-  char mode = 'w';
+  char mode = 'a';
   
   for ( j=0; j < sizeof( q ) / sizeof( int ); j++ ) {
 
@@ -70,7 +69,7 @@ int main() {
 		  rand_utv_gpu( n_A[i], n_A[i], buff_A, ldim_A,
 						1, n_A[i], n_A[i], buff_U, n_A[i],
 						1, n_A[i], n_A[i], buff_V, n_A[i],
-						bl_size, p, q[j], ON );
+						bl_size, p, q[j] );
 		  
 		  // stop timing and record time
 		  cudaDeviceSynchronize();

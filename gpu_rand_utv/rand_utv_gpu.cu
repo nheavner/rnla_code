@@ -14,6 +14,8 @@
 #include <magma.h>
 #include <magma_lapack.h>
 
+// TODO: check for memory leaks when p > 0!!
+
 // =======================================================================
 // Definition of macros
 
@@ -53,7 +55,7 @@ static void gpu_print_double_matrix( char * name, int m_A, int n_A,
   printf( "%s = [\n", name );
   for( i = 0; i < m_A; i++ ) {
     for( j = 0; j < n_A; j++ ) {
-      printf( "%.16e ", A_pc[ i + j * ldim_A ] );
+      printf( "%.2e ", A_pc[ i + j * ldim_A ] );
     }
     printf( "\n" );
   }
@@ -69,7 +71,7 @@ static void print_double_matrix( char * name, int m_A, int n_A,
   printf( "%s = [\n", name );
   for( i = 0; i < m_A; i++ ) {
     for( j = 0; j < n_A; j++ ) {
-      printf( "%.16e ", buff_A[ i + j * ldim_A ] );
+      printf( "%.2e ", buff_A[ i + j * ldim_A ] );
     }
     printf( "\n" );
   }
@@ -86,6 +88,12 @@ static void Allocate_work_array( cusolverDnHandle_t handle,
 				int bl_size );
 
 static void Set_to_identity( int m_A, int n_A, double * A_pc, int ldim_A );
+
+static void Set_to_identity_gpu( int m_A, int n_A, double * A_pg, int ldim_A ); 
+  
+__global__
+static void Set_to_identity_gpu_kern( int m_A, int n_A,
+				double * A_pg, int ldim_A ); 
 
 static void Normal_random_matrix( int m_A, int n_A,
 				double * A_pg, int ldim_A,
@@ -136,6 +144,14 @@ static void local_magsvd( int m_A, int n_A, double * A_pg, int ldim_A,
 
 static void local_left_svecs( int m_A, int n_A, double * A_pg, int ldim_A,
 				double * work_h, int * iwork_h );
+
+static void local_left_svecs_v2( cublasHandle_t cublasH,
+				int m_A, int n_A, double * A_pg, int ldim_A,
+				double * tau_h,
+				double * work_h, int * iwork_h,
+				double * T_d, int ldim_T,
+				double * TVt_d, int ldim_TVt,
+				double * work_pg ); 
 
 static void gpu_dgesvd( cusolverDnHandle_t handle,
 				int m_A, int n_A, double * A_pg, int ldim_A,
@@ -197,6 +213,12 @@ static void my_dormqr_gpu( cublasHandle_t handle,
 				int m_B, int n_B, double * B_pg, int ldim_B,
 				double * TVt_pg, int ldim_TVt,
 				double * work_pg ); 
+
+static void oversample_downdate_gpu( cublasHandle_t handle,
+				int m_Vloc, int n_Vloc, double * Vloc_pg, int ldim_Vloc,
+				int m_Y_os, int n_Y_os, double * Y_os_pg, int ldim_Y_os,
+				double * TVt_pg, int ldim_TVt,
+				double * work_pg );
 __global__
 static void mm_A_minus_B_kern( int m_A, int n_A,
 				double * A_pg, int ldim_A,
@@ -232,7 +254,7 @@ int rand_utv_gpu(
 		int m_A, int n_A, double * A_pc, int ldim_A,
 		int build_U, int m_U, int n_U, double * U_pc, int ldim_U,
 		int build_V, int m_V, int n_V, double * V_pc, int ldim_V,
-		int bl_size, int pp, int q_iter, int ON ) {
+		int bl_size, int pp, int q_iter ) {
 
 // randUTV: It computes the (rank-revealing) UTV factorization of matrix A.
 //
@@ -391,8 +413,8 @@ int rand_utv_gpu(
   m_Vt_svd = bl_size; n_Vt_svd = bl_size; ldim_Vt_svd = bl_size;
   m_U_svd = bl_size; n_U_svd = bl_size; ldim_U_svd = bl_size;
 
-  m_T = bl_size; n_T = bl_size; ldim_T = bl_size;
-  ldim_TVt = bl_size;
+  m_T = bl_size+pp; n_T = bl_size+pp; ldim_T = bl_size+pp;
+  ldim_TVt = bl_size + pp;
 
   // initialize auxiliary objects
   cudaError_t cudaStat = cudaSuccess; 
@@ -414,9 +436,10 @@ int rand_utv_gpu(
 
   cudaStat = cudaMalloc( & tau_pg, bl_size * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
-  cudaStat = cudaMalloc( & T_pg, bl_size * bl_size * sizeof( double ) );
+  cudaStat = cudaMalloc( & T_pg, ( bl_size + pp ) * ( bl_size + pp ) * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
-  cudaStat = cudaMalloc( & TVt_pg, m_A * bl_size * sizeof( double ) );
+  cudaStat = cudaMalloc( & TVt_pg, m_A * ( bl_size + pp ) * sizeof( double ) );
+  // TODO: should previous line replace m_A with bl_size + pp?
   assert( cudaStat == cudaSuccess );
   cudaStat = cudaMalloc( & ss_pg, ( bl_size + pp ) * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
@@ -445,6 +468,7 @@ int rand_utv_gpu(
 
   magma_dmalloc_pinned( & work_h, lwork_mx );
   magma_imalloc_pinned( & iwork_h, 8 * ( bl_size + pp ) );
+  
 
   magInfo = ( magma_int_t * ) malloc( sizeof( magma_int_t ) );
 
@@ -547,12 +571,86 @@ int rand_utv_gpu(
 	// end
     for( j=0; j<q_iter; j++ ) {
 	 
-	  if ( ON == 1 ) {
-		gpu_orth( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
-				  tau_h, T_d,
-				  magInfo );
-	  }
+	  //if ( p > 0 && j == q_iter - 1 ) {
+		//gpu_orth( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+		//		  tau_h, T_d,
+		//		  magInfo );
+	  //}
+	  // TODO: can simplify this conditional?
+      if ( pp > 0 ) {
+	   
+        if ( j < q_iter - 1 ) {
+		  if ( i == 1 ) {
+			// reuse G_loc for storage; G <-- A*Y
+			gpu_dgemm( cublasH, 
+						  n, n, d_one,
+						  m_A_loc, n_A_loc, A_loc_pg, ldim_A,
+						  m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+						  d_zero, 
+						  m_G_loc, n_G_loc, G_loc_pg, ldim_G );
+			
+			// complete iteration; Y <-- A'*G
+			gpu_dgemm( cublasH, 
+						  t, n, d_one,
+						  m_A_loc, n_A_loc, A_loc_pg, ldim_A,
+						  m_G_loc, n_G_loc, G_loc_pg, ldim_G,
+						  d_zero,
+						  m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y );
+		     
+		  }
+		  else {
+			// reuse G_loc for storage; G <-- A*Y
+			gpu_dgemm( cublasH, 
+						  n, n, d_one,
+						  m_A_loc, n_A_loc, A_loc_pg, ldim_A,
+						  m_Y_loc, n_Y_loc - pp, & Y_loc_pg[0+pp*ldim_Y], ldim_Y,
+						  d_zero, 
+						  m_G_loc, n_G_loc - pp, & G_loc_pg[0+pp*ldim_G], ldim_G );
+			
+			// complete iteration; Y <-- A'*G
+			gpu_dgemm( cublasH, 
+						  t, n, d_one,
+						  m_A_loc, n_A_loc, A_loc_pg, ldim_A,
+						  m_G_loc, n_G_loc - pp, & G_loc_pg[0+pp*ldim_G], ldim_G,
+						  d_zero,
+						  m_Y_loc, n_Y_loc - pp, & Y_loc_pg[0+pp*ldim_Y], ldim_Y );
+	      }
+		}
 
+		else {
+          
+		  // orthogonalize cols of Y
+		  if ( i > 0 ) {
+		    // can save some work by avoiding full QR
+		    gpu_orth( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+			  tau_h, T_d,
+			  magInfo );
+		  }
+		  else { // i == 0
+		    // do QR on all cols of Y
+		    gpu_orth( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+			  tau_h, T_d,
+			  magInfo );
+		  }
+		  
+		  // reuse G_loc for storage; G <-- A*Y
+		  gpu_dgemm( cublasH, 
+						n, n, d_one,
+						m_A_loc, n_A_loc, A_loc_pg, ldim_A,
+						m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+						d_zero, 
+						m_G_loc, n_G_loc, G_loc_pg, ldim_G );
+		  
+		  // complete iteration; Y <-- A'*G
+		  gpu_dgemm( cublasH, 
+						t, n, d_one,
+						m_A_loc, n_A_loc, A_loc_pg, ldim_A,
+						m_G_loc, n_G_loc, G_loc_pg, ldim_G,
+						d_zero,
+						m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y );
+		}
+	  }
+	  else {
 	  // reuse G_loc for storage; G <-- A*Y
 	  gpu_dgemm( cublasH, 
 					n, n, d_one,
@@ -568,15 +666,22 @@ int rand_utv_gpu(
 					m_G_loc, n_G_loc, G_loc_pg, ldim_G,
 					d_zero,
 					m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y );
+	  }
 	}
 
 	// if oversampling is done, extract the basis basis of bl_size vectors
 	if ( pp > 0 ) {
 	  // compute left singular vectors of sampling matrix; use first bl_size 
 	  // vectors as new sampling matrix to compute left transformation
-	  local_left_svecs( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
-				work_h, iwork_h );
-	  
+	  //local_left_svecs( m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+		//		work_h, iwork_h );
+      local_left_svecs_v2( cublasH,
+				m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+				tau_h,
+				work_h, iwork_h,
+				T_pg, ldim_T,
+				TVt_pg, ldim_TVt,
+				work_pg ); 
 	}
 
 // TODO: clean up the timing code
@@ -596,7 +701,7 @@ int rand_utv_gpu(
     //   [Vloc,~]   = LOCAL_nonpiv_QR(Y,b);
     // end
 
-	local_magqr_nopiv( m_Y_loc, n_Y_loc-pp, 
+	local_magqr_nopiv( m_Y_loc, n_Y_loc - pp, 
 				Y_loc_pg, ldim_Y,
 				tau_h, magInfo ); 
 
@@ -640,6 +745,7 @@ int rand_utv_gpu(
 					TVt_pg, ldim_TVt,
 					work_pg );
 
+
 #ifdef PROFILE
 	cudaDeviceSynchronize();
 	clock_gettime(CLOCK_MONOTONIC, &time2);
@@ -651,10 +757,19 @@ int rand_utv_gpu(
     // Update matrix V with transformations from the first QR.
 	my_dormqr_gpu( cublasH,
 					r,n,
-					m_Y_loc, n_Y_loc-pp, Y_loc_pg, ldim_Y,
+					m_Y_loc, n_Y_loc - pp, Y_loc_pg, ldim_Y,
 					m_V_right, n_V_right, V_right_pg, ldim_V,
 					TVt_pg, ldim_TVt,
 					work_pg );
+
+    if ( pp > 0 ) {
+    // downdate oversamples from Y to use in the next sampling matrix
+    oversample_downdate_gpu( cublasH,
+			m_Y_loc, n_Y_loc - pp, Y_loc_pg, ldim_Y,
+			m_Y_loc, pp, & Y_loc_pg[0+pp*ldim_Y], ldim_Y,
+			TVt_pg, ldim_TVt, 
+			work_pg );
+	}
 
 #ifdef PROFILE
 	cudaDeviceSynchronize();
@@ -961,6 +1076,34 @@ static void Set_to_identity( int m_A, int n_A, double * A_pc, int ldim_A ) {
 
 }
 
+// ========================================================================
+static void Set_to_identity_gpu( int m_A, int n_A, double * A_pg, int ldim_A ) {
+  
+  Set_to_identity_gpu_kern<<< m_A * n_A / gpu_thread_size + 1, gpu_thread_size >>>( m_A, n_A, A_pg, ldim_A );
+
+}
+
+__global__
+static void Set_to_identity_gpu_kern( int m_A, int n_A,
+				double * A_pg, int ldim_A ) {
+  // kernel function which sets matrix represented by A_pg to the identity
+
+  int ij = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  // determine column, row indices for current thread
+  int i = ij - m_A * ( ij / m_A ); // floor implicitly taken in div
+  int j = ij / m_A; // floor implicitly taken
+
+  // fill in matrix
+  if ( ( ij < m_A * n_A ) && ( i == j ) ) {
+    A_pg[ i + j * ldim_A ] = 1.0;
+  }
+  else if ( ij < m_A * n_A ) {
+    A_pg[ i + j * ldim_A ] = 0.0; 
+  }
+  
+}
+
 // =========================================================================
 static void Normal_random_matrix( int m_A, int n_A,
 				double * A_pg, int ldim_A,
@@ -1239,7 +1382,7 @@ static void local_left_svecs( int m_A, int n_A, double * A_pg, int ldim_A,
 
   // arrays must be in host memory for magma svd
   A_p = ( double * ) malloc( m_A * n_A * sizeof( double ) );
-  U_p = ( double * ) malloc( m_A * m_A * sizeof( double ) );
+  U_p = ( double * ) malloc( m_A * A_mn * sizeof( double ) );
   Vt_p = ( double * ) malloc( n_A * n_A * sizeof( double ) );
   ss_p = ( double * ) malloc( A_mn * sizeof( double ) );
 
@@ -1261,7 +1404,7 @@ static void local_left_svecs( int m_A, int n_A, double * A_pg, int ldim_A,
                 ss_p,
                 U_p, m_A,
                 Vt_p, n_A,
-                work_h, lwork, iwork_h, magInfo );
+				work_h, lwork, iwork_h, magInfo );
 
   // transfer results back to device
   magma_dsetmatrix( m_A, A_mn, U_p, m_A, A_pg, ldim_A );
@@ -1274,6 +1417,172 @@ static void local_left_svecs( int m_A, int n_A, double * A_pg, int ldim_A,
 
   free( magInfo );
 
+}
+
+// ========================================================================
+static void local_left_svecs_v2( cublasHandle_t cublasH,
+				int m_A, int n_A, double * A_pg, int ldim_A,
+				double * tau_h,
+				double * work_h, int * iwork_h,
+				double * T_d, int ldim_T,
+				double * TVt_d, int ldim_TVt,
+				double * work_pg ) {
+  // given an m_A x n_A matrix A stored in device memory in A_pg,
+  // this function returns the first min(m_A,n_A) left singular
+  // vectors in the first min(m_A,n_A) columns of A
+
+  // declare and initialize auxiliary variables
+  int m_work, n_work, ldim_work;
+  cublasOperation_t cublas_op;
+  double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
+
+  double * ones_vc_d, * zeros_vc_d;
+
+  double * ss_p;
+  double * R_p, * U_p, * Vt_p;
+  double * U_pg, * R_pg;
+  int ldim_U, ldim_R;
+  int i,j;
+
+  int lwork = 0; // size of work buffer
+  magma_int_t * magInfo = NULL; // stored on host 
+
+  // vars for determining size of work array
+  int nb = magma_get_dgesvd_nb( m_A, n_A );
+  int A_mx, A_mn;
+
+  // get max and min
+  A_mx = max( m_A, n_A );
+  A_mn = min( m_A, n_A );
+
+  // some more initializations
+  ldim_U = A_mn;
+  ldim_R = A_mn;
+
+  // allocate space for magInfo
+  magInfo = ( magma_int_t * ) malloc( sizeof( magma_int_t ) );
+  
+  // allocate space for auxiliary arrays and initialize
+  cudaMalloc( ( void ** ) & ones_vc_d, n_A * sizeof( double ) );
+  cudaMalloc( ( void ** ) & zeros_vc_d, n_A * sizeof( double ) );
+  
+  set_vc_one( n_A, ones_vc_d );
+  set_vc_zero( n_A, zeros_vc_d );
+
+  // allocate space for intermediate matrix on device 
+  cudaError_t cudaStat;
+  cudaStat = cudaMalloc( ( void ** ) & U_pg, sizeof( double ) * A_mn * A_mn );
+  cudaStat = cudaMalloc( ( void ** ) & R_pg, sizeof( double ) * A_mn * A_mn );
+  
+
+  // arrays must be in host memory for magma svd
+  R_p = ( double * ) malloc( A_mn * A_mn * sizeof( double ) );
+  Vt_p = ( double * ) malloc( A_mn * A_mn * sizeof( double ) );
+  ss_p = ( double * ) malloc( A_mn * sizeof( double ) );
+
+
+  // compute QR of A
+  local_magqr_nopiv( m_A, n_A, 
+			A_pg, ldim_A,
+			tau_h, magInfo );
+
+  // extract upper triangular matrix R
+  
+    // matrix needs to be in host memory for magma svd
+    magma_dgetmatrix( A_mn, A_mn, A_pg, ldim_A, R_p, A_mn );
+
+    // make R upper triangular
+    for ( i=0; i < A_mn; i++ ) {
+	  for ( j=0; j < A_mn; j++ ) {
+	    if ( i > j ) {
+		  R_p[ i + j * A_mn ] = 0.0;
+		}
+	  }
+	}
+	// TODO: if we use this function, move this loop to an aux function
+
+  // determine size of work array
+  magma_dgesdd( MagmaOverwriteVec,
+				A_mn, A_mn, R_p, A_mn,
+				ss_p,
+				NULL, A_mn,
+				Vt_p, A_mn,
+				work_h, -1, iwork_h, magInfo );
+
+  lwork = work_h[ 0 ];
+
+  // compute factorization
+  magma_dgesdd( MagmaOverwriteVec,
+                A_mn, A_mn, R_p, A_mn,
+                ss_p,
+                NULL, A_mn,
+                Vt_p, A_mn,
+				work_h, lwork, iwork_h, magInfo );
+
+  // transfer results to device
+  magma_dsetmatrix( A_mn, A_mn, R_p, A_mn, U_pg, A_mn );
+
+  // compute left svecs of A: Q(:,1:A_mn)*U
+
+	magma_dlarft( cublasH, A_mx, A_mn, 
+				A_pg, ldim_A,
+				tau_h,
+				T_d, ldim_T,
+				TVt_d, ldim_TVt );
+
+	// change A_pg into V needed for muliplication
+	magma_dcopymatrix( n_A, n_A, A_pg, ldim_A, R_pg, ldim_R );
+
+	Make_upper_tri( A_mn, A_mn, A_mn, R_pg );
+
+	mm_A_minus_B( A_mn, A_mn, A_pg, ldim_A, R_pg, A_mn );
+   
+	replace_diag_vec( m_A, n_A, A_pg, ldim_A, ones_vc_d );
+    	
+	// begin multiplication
+	
+	ldim_work = A_mn;
+	
+	// work <-- TVt(:,1:p+b) * U
+	cublasDgemm( cublasH, CUBLAS_OP_N, CUBLAS_OP_N,
+					A_mn, A_mn, A_mn,
+					& d_one,
+					TVt_d, ldim_TVt,
+					U_pg, ldim_U,
+					& d_zero,
+					work_pg, ldim_work );	
+
+	// TVt_pg <-- - V * work; TVt is just used as a placeholder here
+	cublasDgemm( cublasH, CUBLAS_OP_N, CUBLAS_OP_N, 
+					m_A, A_mn, A_mn, 
+					& d_neg_one, 
+					A_pg, ldim_A, 
+					work_pg, ldim_work, 
+					& d_zero, 
+					TVt_d, m_A );
+	  
+	// transfer over to A_pg: A_pg <-- TVt_pg
+	magma_dcopymatrix( m_A, n_A, A_pg, ldim_A,
+				  TVt_d, m_A );
+	
+	// finish calculation by computing A_pg <-- A_pg + [U; 0]
+    mm_A_plus_B( A_mn, A_mn,
+			A_pg, ldim_A,
+			U_pg, ldim_U );
+     
+
+  // free memory
+  free( Vt_p );
+  free( ss_p );
+  free( R_p );
+
+  free( magInfo );
+  
+  cudaFree( U_pg );
+  cudaFree( R_pg );
+
+  cudaFree( ones_vc_d );
+  cudaFree( zeros_vc_d );
 }
 
 // ========================================================================
@@ -1380,6 +1689,7 @@ static void magma_dlarft( cublasHandle_t handle, int n, int k,
 
   // form matrix TV'
   Make_upper_tri( k, k, ldim_T, T_pg );
+  
   cublasDtrmm( handle, CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_LOWER, 
 				CUBLAS_OP_T, CUBLAS_DIAG_UNIT, 
 				k, k, 
@@ -1463,6 +1773,7 @@ static void dlarft_gpu( cublasHandle_t handle, int n, int k,
 
   // form T * V'
   Make_upper_tri( k, k, ldim_T, T_pg );
+
   cublasDtrmm( handle, CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_LOWER, 
 				CUBLAS_OP_T, CUBLAS_DIAG_UNIT, 
 				k, k, 
@@ -1709,6 +2020,94 @@ static void my_dormqr_gpu( cublasHandle_t handle,
   cudaFree( R_pg );
   cudaFree( ones_vc_d );
   cudaFree( zeros_vc_d );
+
+  // TODO: add checks to always make sure work_pg is large enough; will have to pass in size
+  // of work_pg
+
+}
+
+// =======================================================================
+static void oversample_downdate_gpu( cublasHandle_t handle,
+				int m_Vloc, int n_Vloc, double * Vloc_pg, int ldim_Vloc,
+				int m_Y_os, int n_Y_os, double * Y_os_pg, int ldim_Y_os,
+				double * TVt_pg, int ldim_TVt,
+				double * work_pg ) {
+  // downdates the oversamples in Y (Ytmp) to use in the next iteration
+  // if H = I - VTV' was the transform computed using Y, then this function
+  // computes H(:,b+1:end)'*Ytmp;
+  //
+  // Vloc holds the HH reflectors in its lower triangular part at the start;
+  // Vloc holds the downdated samples at the end
+  // Y_os holds the oversamples to be downdated
+
+  // auxiliary vars
+  int m_work, n_work, ldim_work;
+  cublasOperation_t cublas_op;
+  double * R_pg;
+  int ldim_R = n_Vloc;
+  int k = n_Vloc; // this is the number of HH reflectors 
+  double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
+
+  double * ones_vc_d, * zeros_vc_d;
+
+  cudaMalloc( ( void ** ) & R_pg, n_Vloc * n_Vloc * sizeof( double ) );
+  cudaMalloc( ( void ** ) & ones_vc_d, n_Vloc * sizeof( double ) );
+  cudaMalloc( ( void ** ) & zeros_vc_d, n_Vloc * sizeof( double ) );
+
+  // initialize vectors of ones and zeros
+  set_vc_one( n_Vloc, ones_vc_d );
+  set_vc_zero( n_Vloc, zeros_vc_d );
+
+  // quick exit if possible
+  if ( m_Y_os == 0 || n_Y_os == 0 ) {
+    return;
+  }
+
+  // change A_pg into V needed for mult; store upper triangular part in
+  // R so we can restore it later
+  magma_dcopymatrix( n_Vloc, n_Vloc, Vloc_pg, ldim_Vloc, R_pg, ldim_R );
+
+  Make_upper_tri( n_Vloc, n_Vloc, ldim_R, R_pg );
+
+  mm_A_minus_B( n_Vloc, n_Vloc, Vloc_pg, ldim_Vloc, R_pg, ldim_R );
+ 
+  replace_diag_vec( m_Vloc, n_Vloc, Vloc_pg, ldim_Vloc, ones_vc_d );
+
+  // begin multiplication
+
+  // compute H(:,b+1:end)' * Y_os
+  
+  ldim_work = k;
+
+  // work <-- V' * Y_os
+  cublasDgemm( handle, CUBLAS_OP_T, CUBLAS_OP_N,
+				  k, n_Y_os, m_Y_os,
+				  & d_one,
+				  Vloc_pg, ldim_Vloc,
+				  Y_os_pg, ldim_Y_os,
+				  & d_zero,
+				  work_pg, ldim_work );	
+
+  // Y_os(b+1:end,:) <-- - TVt(:,b+1:end)' * work + Y_os(b+1:end,:);
+  // Note that Vloc holds the relevant output for the function
+  cublasDgemm( handle, CUBLAS_OP_T, CUBLAS_OP_N, 
+				  m_Y_os-k, n_Y_os, k, 
+				  & d_neg_one, 
+				  & TVt_pg[0+k*ldim_TVt], ldim_TVt, 
+				  work_pg, ldim_work, 
+				  & d_one, 
+				  & Y_os_pg[k+0*ldim_Y_os], ldim_Y_os );
+	
+  // store downdated samples in Vloc, which also serves as the sampling matrix for next iteration
+  magma_dcopymatrix( m_Y_os-k, n_Y_os, & Y_os_pg[k+0*ldim_Y_os], ldim_Y_os,
+				& Vloc_pg[k+0*ldim_Vloc], ldim_Vloc );
+
+  // free memory
+  cudaFree( R_pg );
+  cudaFree( ones_vc_d );
+  cudaFree( zeros_vc_d );
+
+  // TODO: don't need R matrix in this function
 
   // TODO: add checks to always make sure work_pg is large enough; will have to pass in size
   // of work_pg

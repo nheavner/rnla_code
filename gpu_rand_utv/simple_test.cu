@@ -9,7 +9,7 @@
 #define min( a, b ) ( (a) < (b) ? (a) : (b) )
 
 // #define PRINT_DATA
-
+// #define CHECK_ERROR
 
 // ============================================================================
 // Declaration of local prototypes.
@@ -30,8 +30,6 @@ int main() {
 
   int i;
   double err, norm_A;
-  char t = 'T', n = 'N', f = 'F';
-  double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
 
   double * buff_work;
   int    * buff_iwork;
@@ -39,12 +37,11 @@ int main() {
   int    info;
 
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 2000;
-  n_A      = 1000;
+  m_A      = 5000;
+  n_A      = 5000;
   bl_size =  128;
-  q_iter = 2;
-  pp = 10;
-  ON = 1;
+  q_iter = 1;
+  pp = 128;
   mn_A     = min( m_A, n_A );
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
@@ -92,8 +89,8 @@ int main() {
   rand_utv_gpu( m_A, n_A, buff_A, ldim_A, 
       1, m_A, m_A, buff_U, ldim_U, 
       1, n_A, n_A, buff_V, ldim_V, 
-      bl_size, pp, q_iter, ON );
-      //// 64, 10, 2, 1 );
+      bl_size, pp, q_iter );
+      //// 64, 10, 2 );
   printf( "%% Just after computing factorization.\n" );
 
   // Print results.
@@ -104,7 +101,9 @@ int main() {
 #endif
 
   // check backward error
-  
+
+#ifdef CHECK_ERROR
+
   // compute || A ||
   norm_A = dlange(  & f,  & m_A,  & n_A, 
 				buff_Ac,  & m_A, NULL );
@@ -156,6 +155,8 @@ int main() {
   err = sqrt( err );
 
   printf( "%% || diag(D) - diag(T) || = %e \n", err );
+
+#endif
 
   // Free matrices and vectors.
   free( buff_A );

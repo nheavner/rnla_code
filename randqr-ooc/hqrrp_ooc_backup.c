@@ -86,7 +86,7 @@ static int Mult_BA_A_out( int m, int n, int k,
 				FILE * A_fp, int ldim_A, double * B_p, int ldim_B,
 				double * C_p, int ldim_C,
 				int bl_size,
-				double * t_read, double * t_write, double * t_seek );
+				double * t_read, double * t_write, double * t_init_Y );
 
 static int Downdate_Y( 
                int m_U11, int n_U11, double * buff_U11, int ldim_U11,
@@ -135,7 +135,7 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
 // ============================================================================
 int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-        int nb_alg, int pp, int panel_pivoting ) {
+        int nb_alg, int kk, int pp, int panel_pivoting ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
 // This routine is almost compatible with LAPACK's dgeqp3.
@@ -160,6 +160,9 @@ int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
 // buff_tau:       Output vector with the tau values of the Householder factors.
 // nb_alg:         Block size. 
 //                 Usual values for nb_alg are 32, 64, etc.
+// kk:             Gives number of columns to process.
+//                 If k == n, a full factorization is computed.
+//                 If k < n, then floor(k / nb_alg) columns are processed
 // pp:             Oversampling size.
 //                 Usual values for pp are 5, 10, etc.
 // panel_pivoting: If panel_pivoting==1, QR with pivoting is applied to 
@@ -274,26 +277,16 @@ int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
   // Initialize matrices G and Y.
   NoFLA_Normal_random_matrix( nb_alg + pp, m_A, buff_G, ldim_G );
  
-#ifdef PROFILE
-  clock_gettime( CLOCK_MONOTONIC, & t1 );
-#endif
-
   fseek( A_fp, 0, SEEK_SET );
 
   Mult_BA_A_out( m_Y, n_Y, m_A,
 				A_fp, ldim_A, buff_G, ldim_G,
 				buff_Y, ldim_Y,
 				nb_alg,
-				& t_read, & t_write, & t_seek );
-
-#ifdef PROFILE
-  clock_gettime( CLOCK_MONOTONIC, & t2 );
-  diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
-  t_init_Y += ( double ) diff / (1E9);
-#endif
+				& t_read, & t_write, & t_init_Y );
 
   // Main Loop.
-  for( j = 0; j < mn_A; j += nb_alg ) {
+  for( j = 0; j < kk; j += nb_alg ) {
     b = min( nb_alg, min( n_A - j, m_A - j ) );
 
     // Check whether it is the last iteration.
@@ -524,13 +517,15 @@ int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
   t_tot += t_read + t_write + t_init_Y + t_qr_Y +
 			t_qr_A + t_update_A + t_downdate_Y;
 
-  printf( "%% t_read:          %le    %.2f%%\n", t_read, t_read / t_tot * 100.0 );
-  printf( "%% t_write:         %le    %.2f%%\n", t_write, t_write / t_tot * 100.0 );
-  printf( "%% t_init_Y:        %le    %.2f%%\n", t_init_Y, t_init_Y / t_tot * 100.0 );
-  printf( "%% t_qr_Y:          %le    %.2f%%\n", t_qr_Y, t_qr_Y / t_tot * 100.0 );
-  printf( "%% t_qr_A:          %le    %.2f%%\n", t_qr_A, t_qr_A / t_tot * 100.0 );
-  printf( "%% t_update_A:      %le    %.2f%%\n", t_update_A, t_update_A / t_tot * 100.0 );
-  printf( "%% t_downdate_Y:    %le    %.2f%%\n", t_downdate_Y, t_downdate_Y / t_tot * 100.0 );
+  printf( "%% t_comm:          %le    %.2f%%\n", t_read+t_write, (t_read+t_write) / t_tot * 100.0 );
+  printf( "%%   t_read:          %le    %.2f%%\n", t_read, t_read / t_tot * 100.0 );
+  printf( "%%   t_write:         %le    %.2f%%\n", t_write, t_write / t_tot * 100.0 );
+  printf( "%% t_flop:          %le    %.2f%%\n", t_init_Y+t_qr_Y+t_qr_A+t_update_A+t_downdate_Y, (t_init_Y+t_qr_Y+t_qr_A+t_update_A+t_downdate_Y) / t_tot * 100.0 );
+  printf( "%%   t_init_Y:        %le    %.2f%%\n", t_init_Y, t_init_Y / t_tot * 100.0 );
+  printf( "%%   t_qr_Y:          %le    %.2f%%\n", t_qr_Y, t_qr_Y / t_tot * 100.0 );
+  printf( "%%   t_qr_A:          %le    %.2f%%\n", t_qr_A, t_qr_A / t_tot * 100.0 );
+  printf( "%%   t_update_A:      %le    %.2f%%\n", t_update_A, t_update_A / t_tot * 100.0 );
+  printf( "%%   t_downdate_Y:    %le    %.2f%%\n", t_downdate_Y, t_downdate_Y / t_tot * 100.0 );
   printf( "%% total_time:          %le\n", t_tot );
 #endif
 
@@ -555,7 +550,7 @@ static int Mult_BA_A_out( int m, int n, int k,
 				FILE * A_fp, int ldim_A, double * B_p, int ldim_B,
 				double * C_p, int ldim_C,
 				int bl_size,
-				double * t_read, double * t_write, double * t_seek ) {
+				double * t_read, double * t_write, double * t_init_Y ) {
   // Computes C <-- B*A when matrix A is stored out of core,
   // and B and C can be stored in core
   // NOTE: the file position of the stream must be set correctly before entry!
@@ -608,12 +603,22 @@ static int Mult_BA_A_out( int m, int n, int k,
   * t_read += ( double ) diff / (1E9);
 #endif
 
-	// do multiplication; gives one block of cols of C
+#ifdef PROFILE
+  clock_gettime( CLOCK_MONOTONIC, & t1 );
+#endif
+
+    // do multiplication; gives one block of cols of C
 	dgemm( "No transpose", "No tranpose", 
 			& m, & num_cols, & k,
 			& d_one, B_p, & ldim_B, A_bl_p, & k,
 			& d_zero, & C_p[ 0 + i * ldim_C ], & ldim_C );
   
+#ifdef PROFILE
+  clock_gettime( CLOCK_MONOTONIC, & t2 );
+  diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
+  * t_init_Y += ( double ) diff / (1E9);
+#endif
+
   }
 
   // free memory
