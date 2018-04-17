@@ -28,9 +28,9 @@ int main() {
   int i, j;
 
   int bl_size = 128;
-  int n_A[] = {18000};//{2000,3000,4000,5000,6000,8000,10000,12000};
-  int q[] = {0,1,2};
-  int p = 128;
+  int n_A[] = {2000,3000,4000,5000,6000,8000,10000,12000,15000};
+  int q[] = {0,1,2,3,4};
+  int p = 0;
 
   // for timing
   timespec t1, t2;
@@ -87,7 +87,7 @@ int main() {
   }
 
   // write results to file
-  ofp = fopen( "times_rutv_gpu_OS_ON.m", & mode );
+  ofp = fopen( "times_rutv_gpu.m", & mode );
 
 	fprintf( ofp, "%% block size was %d \n \n", bl_size );
 

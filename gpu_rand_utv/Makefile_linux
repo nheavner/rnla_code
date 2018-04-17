@@ -23,7 +23,7 @@ simple_test.o : simple_test.cu
 	-I/opt/intel/mkl/include \
 
 rand_utv_gpu.o : rand_utv_gpu.cu
-	$(CC) $(GENCODE_FLAGS) -c rand_utv_gpu.cu \
+	@$(CC) $(GENCODE_FLAGS) -c rand_utv_gpu.cu \
 	-I/opt/intel/mkl/include \
 	-I/usr/local/magma/include \
 	-dc -DADD_ -DMAGMA_WITH_MKL 
