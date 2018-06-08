@@ -8,8 +8,8 @@
 #define max( a, b ) ( (a) > (b) ? (a) : (b) )
 #define min( a, b ) ( (a) < (b) ? (a) : (b) )
 
-// #define PRINT_DATA
-
+//#define PRINT_DATA
+//#define CHECK_ERROR
 
 // ============================================================================
 // Declaration of local prototypes.
@@ -17,35 +17,50 @@
 static void matrix_generate( int m_A, int n_A, 
 				double * buff_A, int ldim_A );
 
+#ifdef PRINT_DATA
 static void print_double_matrix( char * name, int m_A, int n_A, 
                 double * buff_A, int ldim_A );
-
+#endif
 
 // ============================================================================
 int main() {
-  int     bl_size, pp, q_iter, ON, m_A, n_A, mn_A, ldim_A, ldim_U, ldim_V;
-  double  * buff_A, * buff_U, * buff_V, * buff_UT;
-  double * buff_Ac, * buff_Acc;
-  double * buff_ss;
+  int     bl_size, pp, q_iter, 
+		  m_A, n_A, ldim_A, 
+		  ldim_U, ldim_V;
+  double  * buff_A, * buff_U, * buff_V;
+ 
+#ifdef PRINT_DATA
+  char A_name[] = "A", U_name[] = "U1", 
+	   V_name[] = "V1", T_name[] = "T1"; 
 
-  int i;
+  char * A_name_pt = A_name, * U_name_pt = U_name, 
+	   * V_name_pt = V_name, * T_name_pt = T_name;
+#endif
+
+#ifdef CHECK_ERROR
+  char f = 'f', n = 'n', t = 't';
+  double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0; 
+  
+  double * buff_UT, * buff_Ac, * buff_Acc;
+  
   double err, norm_A;
-  char t = 'T', n = 'N', f = 'F';
-  double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
+  double * buff_ss;
 
   double * buff_work;
   int    * buff_iwork;
   int    lwork;
   int    info;
 
+  int    i;
+#endif
+
+
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 2000;
-  n_A      = 1000;
+  m_A      = 400;
+  n_A      = 400;
   bl_size =  128;
   q_iter = 2;
-  pp = 10;
-  ON = 1;
-  mn_A     = min( m_A, n_A );
+  pp = 128;
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   ldim_A   = max( 1, m_A );
@@ -56,6 +71,7 @@ int main() {
   buff_V   = ( double * ) malloc( n_A * n_A * sizeof( double ) );
   ldim_V   = max( 1, n_A );
 
+#ifdef CHECK_ERROR
   buff_Ac  = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   buff_Acc = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   buff_UT  = ( double * ) malloc( m_A * n_A * sizeof( double ) );
@@ -67,10 +83,12 @@ int main() {
 
   buff_work = ( double * ) malloc( lwork * sizeof( double ) );
   buff_iwork = ( int * ) malloc( 8 * min( m_A, n_A ) * sizeof( int ) );
+#endif
 
   // Generate matrix.
   matrix_generate( m_A, n_A, buff_A, ldim_A );
 
+#ifdef CHECK_ERROR
   // copy data to later check error
   for ( i=0; i < m_A * n_A; i++ ) {
     buff_Ac[ i ] = buff_A[ i ];
@@ -79,39 +97,42 @@ int main() {
   for ( i=0; i < m_A * n_A; i++ ) {
     buff_Acc[ i ] = buff_A[ i ];
   }
+#endif
 
 #ifdef PRINT_DATA
-  print_double_matrix( "ai", m_A, n_A, buff_A, ldim_A );
+  printf("b = %d; p = %d; q = %d; \n", bl_size, pp, q_iter );
+  print_double_matrix( A_name_pt, m_A, n_A, buff_A, ldim_A );
 #endif
 
   // Factorize matrix.
   printf( "%% Just before computing factorization.\n" );
-  // New factorization.
-  // We use a small block size to factorize the small input matrix, but you
-  // should use larger blocksizes such as 64 for larger matrices.
+
   rand_utv_gpu( m_A, n_A, buff_A, ldim_A, 
       1, m_A, m_A, buff_U, ldim_U, 
       1, n_A, n_A, buff_V, ldim_V, 
-      bl_size, pp, q_iter, ON );
-      //// 64, 10, 2, 1 );
+      bl_size, pp, q_iter );
+      //// 64, 10, 2 );
+
   printf( "%% Just after computing factorization.\n" );
 
   // Print results.
 #ifdef PRINT_DATA
-  print_double_matrix( "tf", m_A, n_A, buff_A, ldim_A );
-  print_double_matrix( "uf", m_A, m_A, buff_U, ldim_U );
-  print_double_matrix( "vf", n_A, n_A, buff_V, ldim_V );
+  print_double_matrix( T_name_pt, m_A, n_A, buff_A, ldim_A );
+  print_double_matrix( U_name_pt, m_A, m_A, buff_U, ldim_U );
+  print_double_matrix( V_name_pt, n_A, n_A, buff_V, ldim_V );
 #endif
 
   // check backward error
-  
+
+#ifdef CHECK_ERROR
+
   // compute || A ||
   norm_A = dlange(  & f,  & m_A,  & n_A, 
 				buff_Ac,  & m_A, NULL );
 
   // compute U * T
   dgemm( & n, & n, & m_A, & n_A, & m_A,
-		& d_one, buff_U, & ldim_A,
+		& d_one, buff_U, & m_A,
 		buff_A, & ldim_A,
 		& d_zero, buff_UT, & m_A );
 
@@ -124,6 +145,8 @@ int main() {
   // compute || A - U * T * V'  ||
   err = dlange(  & f,  & m_A,  & n_A, 
 				buff_Ac,  & m_A, NULL );
+
+  printf("err = %.2e \n", err);
 
   printf( "%% || A - U * T * V' ||_F / || A ||_F = %e \n", err / norm_A );
 
@@ -157,17 +180,23 @@ int main() {
 
   printf( "%% || diag(D) - diag(T) || = %e \n", err );
 
+#endif
+
   // Free matrices and vectors.
   free( buff_A );
   free( buff_U );
   free( buff_V );
+  
+#ifdef CHECK_ERROR
   free( buff_Ac );
   free( buff_Acc );
   free( buff_UT );
+
   free( buff_ss );
 
   free( buff_work );
   free( buff_iwork );
+#endif
 
   printf( "%% End of Program\n" );
 
@@ -188,6 +217,7 @@ static void matrix_generate( int m_A, int n_A, double * buff_A, int ldim_A ) {
 
 
 // ============================================================================
+#ifdef PRINT_DATA
 static void print_double_matrix( char * name, int m_A, int n_A, 
                 double * buff_A, int ldim_A ) {
   int  i, j;
@@ -201,4 +231,4 @@ static void print_double_matrix( char * name, int m_A, int n_A,
   }
   printf( "];\n" );
 }
-
+#endif

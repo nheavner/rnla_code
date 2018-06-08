@@ -35,6 +35,8 @@ int main() {
   int p = 0;
 
   int n_A = 50000;
+  int k   = n_A;
+
   char n_A_str[6];
   sprintf(n_A_str, "%d", n_A );
 
@@ -75,7 +77,7 @@ int main() {
 		
 		// do SSD factorization
 		hqrrp_ooc( A_ssd_fname, n_A, n_A, n_A, buff_p, buff_tau,
-					bl_size[ i ], p, 1 );
+					bl_size[ i ], k, p, 1 );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );

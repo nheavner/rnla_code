@@ -38,6 +38,9 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <time.h>
+#include <mkl.h>
 #include "NoFLA_UTV_WY_blk_var2.h"
 
 
@@ -52,8 +55,8 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 // ============================================================================
 // Compilation declarations.
 
-#undef PROFILE
-
+#define PROFILE
+#define PROFILE_FOR_GRAPH
 
 // ============================================================================
 // Declaration of local prototypes.
@@ -119,6 +122,9 @@ static int NoFLA_QRP_pivot_G( int j_max_col,
                int m_G, double * buff_G, int ldim_G,
                double * buff_d, double * buff_e );
 
+static struct timespec start_timer( void ); 
+
+static double stop_timer( struct timespec t1 ); 
 
 // ============================================================================
 int NoFLA_UTV_WY_blk_var2(
@@ -177,7 +183,8 @@ int NoFLA_UTV_WY_blk_var2(
   int     m_YBl, n_YBl, m_GBl, n_GBl, m_CR, n_CR, m_AB1, n_AB1, m_AB2, n_AB2,
           m_WR, n_WR, m_XR, n_XR;
 #ifdef PROFILE
-  double  t1, t2, tt_by,
+  struct timespec t1;
+  double  tt_by,
           tt_qr1_fact, tt_qr1_updt_a, tt_qr1_updt_v,
           tt_qr2_fact, tt_qr2_updt_a, tt_qr2_updt_u,
           tt_svd_fact, tt_svd_updt_a, tt_svd_updt_uv;
@@ -295,7 +302,7 @@ int NoFLA_UTV_WY_blk_var2(
     // Aloc = T([J2,I3],[J2,J3]);
     // Y    = Aloc'*randn(m-(j-1)*b,b+p);
 #ifdef PROFILE
-    t1 = FLA_Clock();
+    t1 = start_timer();
 #endif
     // FLA_Part_1x2( GB,  & GBl, & None1,    bRow + pp, FLA_LEFT );
     // FLA_Part_1x2( YB,  & YBl, & None1,    bRow + pp, FLA_LEFT );
@@ -328,8 +335,8 @@ int NoFLA_UTV_WY_blk_var2(
               & d_zero, buff_YBl, & ldim_Y );
     }
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_by += ( t2 - t1 );
+    tt_by += stop_timer(t1);
+	t1 = start_timer();
 #endif
 
     // %%% Construct the local transform to be applied "from the left".
@@ -339,9 +346,6 @@ int NoFLA_UTV_WY_blk_var2(
     // else
     //   [Vloc,~]   = LOCAL_nonpiv_QR(Y,b);
     // end
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     // FLA_Part_2x2( S1,  & S1tl,  & None1,
     //                    & None2, & None3,   bRow, bRow, FLA_TL );
     if( pp > 0 ) {
@@ -354,15 +358,11 @@ int NoFLA_UTV_WY_blk_var2(
           buff_S1tl, ldim_S1 );
     }
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_qr1_fact += ( t2 - t1 );
+    tt_qr1_fact += stop_timer(t1);
 #endif
 
     // %%% Apply the pivot matrix to rotate maximal mass into the "J2" column.
     // T(:,[J2,J3])  = T(:,[J2,J3])*Vloc;
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     // Update matrix A with transformations from the first QR.
     // FLA_Part_2x2( YBl,   & YBl1, & None1,
     //                      & YBl2, & None2,   bRow, bRow, FLA_TL );
@@ -373,14 +373,11 @@ int NoFLA_UTV_WY_blk_var2(
         m_CR,  n_CR, buff_BR,   ldim_A );
 
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_qr1_updt_a += ( t2 - t1 );
+    tt_qr1_updt_a += stop_timer(t1);
+	t1 = start_timer();
 #endif
 
     // Update matrix V with transformations from the first QR.
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     if( build_v == 1 ) {
       // MyFLA_Apply_Q_UT_rnfc_blk( YBl1, YBl2, S1tl, D1, D2 );
       NoFLA_Apply_Q_WY_rnfc_blk_var2(
@@ -389,16 +386,13 @@ int NoFLA_UTV_WY_blk_var2(
           m_XR,  n_XR, buff_DR,   ldim_V );
     }
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_qr1_updt_v += ( t2 - t1 );
+    tt_qr1_updt_v += stop_timer( t1 );
+	t1 = start_timer();
 #endif
 
     // %%% Next determine the rotations to be applied "from the left".
     // [Uloc,Dloc]      = LOCAL_nonpiv_QR(T([J2,I3],J2));
     // Factorize [ A11; A21 ].
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     // FLA_Merge_2x1( A11,
     //                A21,   & AB1 );
     // FLA_Part_2x2( S2,  & S2tl,  & None1,
@@ -407,28 +401,22 @@ int NoFLA_UTV_WY_blk_var2(
     NoFLA_QRP_WY_unb_var2( 0, bRow, m_AB1, n_AB1, buff_AB1, ldim_A,
         buff_S2tl, ldim_S2 );
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_qr2_fact += ( t2 - t1 );
+    tt_qr2_fact += stop_timer( t1 );
+	t1 = start_timer();
 #endif
 
     // Update rest of matrix A with transformations from the second QR.
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     // MyFLA_Apply_Q_UT_lhfc_blk( A11, A21, S2tl, A12, A22 );
     NoFLA_Apply_Q_WY_lhfc_blk_var2(
         m_AB1, n_AB1, buff_AB1,  ldim_A,
         bRow,  bRow,  buff_S2tl, ldim_S2,
         m_AB2, n_AB2, buff_AB2,  ldim_A );
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_qr2_updt_a += ( t2 - t1 );
+    tt_qr2_updt_a += stop_timer( t1 );
+	t1 = start_timer();
 #endif
 
     // Update matrix U with transformations from the second QR.
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     if( build_u == 1 ) {
       // MyFLA_Apply_Q_UT_rnfc_blk( A11, A21, S2tl, C1, C2 );
       NoFLA_Apply_Q_WY_rnfc_blk_var2(
@@ -437,8 +425,8 @@ int NoFLA_UTV_WY_blk_var2(
           m_WR,  n_WR,  buff_CR,   ldim_U );
     }
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_qr2_updt_u += ( t2 - t1 );
+    tt_qr2_updt_u += stop_timer( t1 );
+	t1 = start_timer();
 #endif
 
     // Compute miniSVD.
@@ -453,9 +441,6 @@ int NoFLA_UTV_WY_blk_var2(
     // %%% Store away the ON matrices.
     // U(:,[J2,I3]) = U(:,[J2,I3])*Uloc;
     // V(:,[J2,J3]) = V(:,[J2,J3])*Vloc;
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     // FLA_Part_2x2( SU,  & SUtl,  & None1,
     //                    & None2, & None3,   bRow, bRow, FLA_TL );
     // FLA_Part_1x2( sv,  & svl,   & None1,   bRow, FLA_LEFT );
@@ -475,13 +460,10 @@ int NoFLA_UTV_WY_blk_var2(
     // MyFLA_Copy_vector_into_diagonal( svl, A11 );
     NoFLA_Copy_vector_into_diagonal( buff_sv, bRow, bRow, buff_A11, ldim_A );
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_svd_fact += ( t2 - t1 );
+    tt_svd_fact += stop_timer( t1 );
+	t1 = start_timer();
 #endif
 
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     // Apply U of miniSVD to A.
     // FLA_Obj_create_conf_to( FLA_NO_TRANSPOSE, A12, & A12copy );
     // FLA_Copy( A12, A12copy );
@@ -502,13 +484,10 @@ int NoFLA_UTV_WY_blk_var2(
         bRow, bRow, buff_SVTtl, ldim_SVT,
         i,    bRow, buff_A01,   ldim_A );
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_svd_updt_a += ( t2 - t1 );
+    tt_svd_updt_a += stop_timer( t1 );
+	t1 = start_timer();
 #endif
 
-#ifdef PROFILE
-    t1 = FLA_Clock();
-#endif
     // Apply U of miniSVD to global U.
     if( build_u == 1 ) {
       // FLA_Obj_create_conf_to( FLA_NO_TRANSPOSE, C1, & C1copy );
@@ -533,8 +512,7 @@ int NoFLA_UTV_WY_blk_var2(
           m_V,  bRow, buff_D1,    ldim_V );
     }
 #ifdef PROFILE
-    t2 = FLA_Clock();
-    tt_svd_updt_uv += ( t2 - t1 );
+    tt_svd_updt_uv += stop_timer( t1 );
 #endif
 
     // End of main loop.
@@ -564,27 +542,35 @@ int NoFLA_UTV_WY_blk_var2(
   free( buff_SVT );
 
 #ifdef PROFILE
-  printf( "%% tt_build_y:     %le\n", tt_by );
-  printf( "%% tt_qr1:         %le\n", tt_qr1_fact + tt_qr1_updt_a +
-                                      tt_qr1_updt_v );
-  printf( "%%     tt_qr1_fact:    %le\n", tt_qr1_fact );
-  printf( "%%     tt_qr1_updt_a:  %le\n", tt_qr1_updt_a );
-  printf( "%%     tt_qr1_updt_v:  %le\n", tt_qr1_updt_v );
-  printf( "%% tt_qr2:         %le\n", tt_qr2_fact + tt_qr2_updt_a +
-                                      tt_qr2_updt_u );
-  printf( "%%     tt_qr2_fact:    %le\n", tt_qr2_fact );
-  printf( "%%     tt_qr2_updt_a:  %le\n", tt_qr2_updt_a );
-  printf( "%%     tt_qr2_updt_u:  %le\n", tt_qr2_updt_u );
-  printf( "%% tt_svd:         %le\n", tt_svd_fact + tt_svd_updt_a +
-                                      tt_svd_updt_uv);
-  printf( "%%     tt_svd_fact:    %le\n", tt_svd_fact );
-  printf( "%%     tt_svd_updt_a:  %le\n", tt_svd_updt_a );
-  printf( "%%     tt_svd_updt_uv: %le\n", tt_svd_updt_uv );
-  printf( "%% total_time:     %le\n",
-          tt_by +
-          tt_qr1_fact + tt_qr1_updt_a + tt_qr1_updt_v +
-          tt_qr2_fact + tt_qr2_updt_a + tt_qr2_updt_u +
-          tt_svd_fact + tt_svd_updt_a + tt_svd_updt_uv );
+  #ifdef PROFILE_FOR_GRAPH
+    printf("%% n = %d \n", n_A);
+    printf("%le %le %le %le \n", tt_by, 
+								 tt_qr1_fact+tt_qr1_updt_a+tt_qr1_updt_v, 
+								 tt_qr2_fact+tt_qr2_updt_a+tt_qr2_updt_u, 
+								 tt_svd_fact+tt_svd_updt_a+tt_svd_updt_uv);
+  #else
+	printf( "%% tt_build_y:     %le\n", tt_by );
+	printf( "%% tt_qr1:         %le\n", tt_qr1_fact + tt_qr1_updt_a +
+										tt_qr1_updt_v );
+	printf( "%%     tt_qr1_fact:    %le\n", tt_qr1_fact );
+	printf( "%%     tt_qr1_updt_a:  %le\n", tt_qr1_updt_a );
+	printf( "%%     tt_qr1_updt_v:  %le\n", tt_qr1_updt_v );
+	printf( "%% tt_qr2:         %le\n", tt_qr2_fact + tt_qr2_updt_a +
+										tt_qr2_updt_u );
+	printf( "%%     tt_qr2_fact:    %le\n", tt_qr2_fact );
+	printf( "%%     tt_qr2_updt_a:  %le\n", tt_qr2_updt_a );
+	printf( "%%     tt_qr2_updt_u:  %le\n", tt_qr2_updt_u );
+	printf( "%% tt_svd:         %le\n", tt_svd_fact + tt_svd_updt_a +
+										tt_svd_updt_uv);
+	printf( "%%     tt_svd_fact:    %le\n", tt_svd_fact );
+	printf( "%%     tt_svd_updt_a:  %le\n", tt_svd_updt_a );
+	printf( "%%     tt_svd_updt_uv: %le\n", tt_svd_updt_uv );
+	printf( "%% total_time:     %le\n",
+			tt_by +
+			tt_qr1_fact + tt_qr1_updt_a + tt_qr1_updt_v +
+			tt_qr2_fact + tt_qr2_updt_a + tt_qr2_updt_u +
+			tt_svd_fact + tt_svd_updt_a + tt_svd_updt_uv );
+  #endif
 #endif
 
   return 0;
@@ -1109,4 +1095,46 @@ static int NoFLA_QRP_pivot_G( int j_max_col,
   return 0;
 }
 
+// ======================================================================== 
+static struct timespec start_timer( void ) { 
+  // this function returns a timespec object that contains
+  // clock information at the time of this function's execution
+  //
+  // performs the same function as MATLAB's 'tic'
+ 
+  // declare variables
+  struct timespec t1;
 
+  // get current clock info
+  clock_gettime( CLOCK_MONOTONIC, & t1 );
+
+  return t1;
+
+}
+	
+// ======================================================================== 
+static double stop_timer( struct timespec t1 ) {
+  // this function returns a variable of type double that
+  // corresponds to the number of seconds that have elapsed
+  // since the time that t1 was generated by start_timer
+  // 
+  // performs the same function as MATLAB's 'toc'
+  //
+  // t1: the output of start_timer; holds clock information
+  //     from a function call to start_timer
+  
+  // declare variables 
+  struct timespec  t2;
+  uint64_t  t_elapsed_nsec;
+  double    t_elapsed_sec;
+
+  // get current clock info
+  clock_gettime(CLOCK_MONOTONIC, & t2);
+
+  // calculate elapsed time
+  t_elapsed_nsec = (1000000000L) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
+  t_elapsed_sec = (double) t_elapsed_nsec / (1000000000L);
+
+  return t_elapsed_sec;
+
+}

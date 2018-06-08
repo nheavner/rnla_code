@@ -35,13 +35,13 @@ static void set_pvt_to_zero( int n_p, int * buff_p );
 
 // ============================================================================
 int main( int argc, char *argv[] ) {
-  int     nb_alg, pp, m_A, n_A, mn_A, ldim_A, ldim_Q, info, lwork;
+  int     nb_alg, pp, k, m_A, n_A, mn_A, ldim_A, ldim_Q, info, lwork;
   double  * buff_A, * buff_tau, * buff_Q, * buff_wk_qp4, * buff_wk_orgqr;
   double  * buff_Ac, * buff_tauc;
   int     * buff_p;
   int     * buff_pc;
   FILE	  * A_fp; // pointer to the file that stores A
-  char    A_fname[] = "./A_mat";//"/media/hdd/A_mat";
+  char    A_fname[] = "/media/hdd/A_mat";//"/media/hdd/A_mat";
   size_t  read_check;
   int     eq_check = 1;
   int i;
@@ -54,7 +54,9 @@ int main( int argc, char *argv[] ) {
   m_A      = 10000;
   n_A      = 10000;
   nb_alg   = 128;
+  k        = n_A;
   pp	   = 0;
+
   mn_A     = min( m_A, n_A );
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   ldim_A   = max( 1, m_A );
@@ -115,7 +117,7 @@ int main( int argc, char *argv[] ) {
   clock_gettime( CLOCK_MONOTONIC, & t1 );
 
   hqrrp_ooc( A_fname, m_A, n_A, ldim_A, buff_p, buff_tau, 
-           nb_alg, pp, 1 );
+           nb_alg, k, pp, 1 );
 
   clock_gettime( CLOCK_MONOTONIC, & t2 );
   diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
@@ -124,7 +126,7 @@ int main( int argc, char *argv[] ) {
   // Current factorization.
   NoFLA_HQRRP_WY_blk_var4( m_A, n_A, buff_Ac, ldim_A,
 				buff_pc, buff_tauc, 
-				nb_alg, pp, 1 );
+				nb_alg, pp, k, 1 );
 
   printf( "%% Just after computing factorization.\n" );
   printf( "%% Work[ 0 ] after factorization: %d \n", ( int ) buff_wk_qp4[ 0 ] );

@@ -32,9 +32,11 @@ int main() {
 
   int i, j;
 
-  int bl_size = 128;
+  int bl_size = 250;
+  int k = 1000;
   int p = 0;
-  int n_A[] = {1000,2000,3000,4000,5000,6000,8000,10000,12000, 15000, 20000, 25000, 30000, 35000, 40000, 50000};
+  int n_A[] = {150000};//{1000, 2000, 4000, 5000, 8000, 10000, 15000, 20000, 30000, 40000, 45000, 50000, 70000, 100000, 110000, 120000, 150000};
+
 
   // for timing
   struct timespec t1, t2;
@@ -50,7 +52,7 @@ int main() {
   for ( i=0; i < sizeof( n_A ) / sizeof( int ); i++ ) {
 
 	// Create matrix A, matrix P, and vector tau.
-	if ( n_A[ i ] <= 40000 ) {
+	if ( n_A[ i ] <= 45000 ) {
 	  buff_A    = ( double * ) malloc( n_A[ i ] * n_A[ i ] * sizeof( double ) );
       if ( !buff_A ) {
 	    printf("Error! Memory allocation failed \n"); 
@@ -60,15 +62,39 @@ int main() {
 	buff_p    = ( int * )  malloc( n_A[ i ] * sizeof( int ) ); 
 
 	buff_tau  = ( double * ) malloc( n_A[ i ] * sizeof( double ) );
-	
+/*	
+	// begin test
+	double test_time;
+    double * mat_col;
+    int n = 100000;
+
+    mat_col = ( double * ) malloc( n*20000* sizeof(double) );
+
+	A_fp = fopen(A_hdd_fname,"r");
+
+	clock_gettime(CLOCK_MONOTONIC, & t1 );
+
+    for ( i=0;i <5; i++ ) {
+	  fread( mat_col, sizeof(double), n*20000, A_fp );
+    }
+
+	clock_gettime( CLOCK_MONOTONIC, & t2 );
+	diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
+	test_time = ( double ) diff / (1E9);
+
+    printf("test time is %.5e \n", test_time);
+
+    fclose(A_fp);
+    free( mat_col );
+	// end test
+*/
+
 	// Generate matrix.
 	matrix_generate_ooc( n_A[ i ], n_A[ i ], A_ssd_fname );
 	matrix_generate_ooc( n_A[ i ], n_A[ i ], A_hdd_fname );
 
-    if ( n_A[ i ] <= 40000 ) {
+    if ( n_A[ i ] <= 45000 ) {
 	  A_fp = fopen( A_ssd_fname, "r" );
-	  read_check = fread( buff_A, sizeof( double ), n_A[ i ] * n_A[ i ], A_fp );
-	  fclose( A_fp );
 	}
 
 	for ( j=0; j < n_A[i]; j++ ) {
@@ -82,8 +108,8 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do SSD factorization
-		//hqrrp_ooc( A_ssd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-		//			bl_size, p, 1 );
+		hqrrp_ooc( A_ssd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
+					bl_size, k, p, 1 );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -95,7 +121,7 @@ int main() {
 		
 		// do HDD factorization
 		hqrrp_ooc( A_hdd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-		  			bl_size, p, 1 );
+		  			bl_size, k, p, 1 );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -106,9 +132,9 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do in-core factorization
-		if ( n_A[ i ] <= 40000 ) {
-		  //NoFLA_HQRRP_WY_blk_var4( n_A[i], n_A[i], buff_A, n_A[i], buff_p, buff_tau,
-		  //			bl_size, p, 1 );
+		if ( n_A[ i ] <= 45000 ) {
+		  NoFLA_HQRRP_WY_blk_var4( n_A[i], n_A[i], buff_A, n_A[i], buff_p, buff_tau,
+		   			bl_size, k, p, 1 );
 		}
 
 		// stop timing and record time
@@ -117,7 +143,7 @@ int main() {
 		t_cpqr_in[ i ] = ( double ) diff / (1E9);
 
 	// Free matrices and vectors.
-	if ( n_A[ i ] <= 40000 ) {
+	if ( n_A[ i ] <= 45000 ) {
 	  free( buff_A );
 	}
 	free( buff_p );
@@ -126,10 +152,11 @@ int main() {
     // remove file that stored matrix
 	remove( A_ssd_fname );
 	remove( A_hdd_fname );
+    
   }
 
   // write results to file
-  ofp = fopen( "cpqr_ooc_times.m", & mode );
+  ofp = fopen( "cpqr_ooc_partial_times.m", & mode );
 
   fprintf( ofp, "%% block size was %d \n \n", bl_size );
 
@@ -177,6 +204,7 @@ int main() {
   printf( "%% End of Program\n" );
 
   return 0;
+  
 }
 
 // ============================================================================
