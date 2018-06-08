@@ -56,8 +56,8 @@ int main() {
 
 
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 5000;
-  n_A      = 5000;
+  m_A      = 400;
+  n_A      = 400;
   bl_size =  128;
   q_iter = 2;
   pp = 128;

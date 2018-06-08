@@ -25,7 +25,8 @@
 // =======================================================================
 // Compilation declarations
 
-//#define PROFILE
+#define PROFILE
+#define PROFILE_FOR_GRAPHING
 
 // =======================================================================
 // Definition of global variables
@@ -236,6 +237,7 @@ int rand_utv_gpu(
   int mn_A, num_spl;
   int m_G, n_G, ldim_G, m_G_loc, n_G_loc,
 	  m_Y, n_Y, ldim_Y, m_Y_loc, n_Y_loc;
+  int m_Y_svecs, n_Y_svecs, ldim_Y_svecs;
   int m_A_loc, n_A_loc; // this block is comprised of sections 22,23,32,33
   int m_A_right, n_A_right; // this block is comprised of sections
 							// 12, 13, 22, 23, 32, 33
@@ -257,7 +259,7 @@ int rand_utv_gpu(
   int ldim_TVt;
   double * A_pg, * U_pg, * V_pg; // pointers to matrix arrays in gpu
   double * G_pg, * G_loc_pg, * A_loc_pg, * A_right_pg, * A_bl_pg, * A_BR_pg,
-		 * A_22_pg, * A_12_pg, * A_23_pg, * Y_pg, * Y_loc_pg;
+		 * A_22_pg, * A_12_pg, * A_23_pg, * Y_pg, * Y_loc_pg, * Y_svecs_pg;
   double * V_right_pg, * U_right_pg;
   double * V_mid_pg, * U_mid_pg;
   double * Vt_svd_pg, * U_svd_pg;
@@ -346,7 +348,9 @@ int rand_utv_gpu(
   m_A_loc = m_A;	n_A_loc = n_A;
   m_G     = m_A;	n_G     = bl_size + pp;		ldim_G = m_A;
   m_Y     = n_A;	n_Y     = bl_size + pp;		ldim_Y = n_A;
- 
+
+  m_Y_svecs = bl_size + pp;		n_Y_svecs = bl_size + pp;	ldim_Y_svecs = m_Y_svecs;
+
   m_Vt_svd = bl_size;	n_Vt_svd = bl_size;		ldim_Vt_svd = bl_size;
   m_U_svd  = bl_size;	n_U_svd  = bl_size;		ldim_U_svd  = bl_size;
 
@@ -366,6 +370,9 @@ int rand_utv_gpu(
   cudaStat = cudaMalloc( & Y_pg, m_Y * n_Y * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
 
+  cudaStat = cudaMalloc( & Y_svecs_pg, ( bl_size + pp ) * ( bl_size + pp ) * sizeof( double ) );
+  assert( cudaStat == cudaSuccess );
+
   cudaStat = cudaMalloc( & Vt_svd_pg, bl_size * bl_size * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
   cudaStat = cudaMalloc( & U_svd_pg, bl_size * bl_size * sizeof( double ) );
@@ -381,7 +388,7 @@ int rand_utv_gpu(
   cudaStat = cudaMalloc( & ss_pg, ( bl_size + pp ) * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
 
-  cudaStat = cudaMalloc( & Tmp_pg, m_A * bl_size * sizeof( double ) );
+  cudaStat = cudaMalloc( & Tmp_pg, ( m_A * ( bl_size + pp ) ) * sizeof( double ) );
   assert( cudaStat == cudaSuccess );
 
   cudaMalloc( ( void ** ) & devInfo, sizeof( int ) );
@@ -425,7 +432,7 @@ int rand_utv_gpu(
 	
 	m_A_loc   = m_A - i;	n_A_loc   = n_A - i;
 	m_G_loc   = m_A - i;	n_G_loc   = num_spl + pp;
-    m_Y_loc   = n_A - i;	n_Y_loc   = num_spl + pp;
+    m_Y_loc   = n_A - i;	n_Y_loc   = min( num_spl + pp, m_Y_loc );
     m_A_right = m_A;	    n_A_right = n_A - i;
 	m_V_right = n_A;	    n_V_right = n_A - i;
 	m_A_bl    = m_A - i;	n_A_bl    = num_spl;
@@ -470,10 +477,9 @@ int rand_utv_gpu(
 		gpu_dgemm( cublasH, 
 				   t, n, d_one,
 				   m_A_loc, n_A_loc, A_loc_pg, ldim_A,
-				   m_G_loc, n_G_loc - pp, & G_loc_pg[0+pp*ldim_G], ldim_G,
+				   m_G_loc, max(n_G_loc - pp,0), & G_loc_pg[0+pp*ldim_G], ldim_G,
 				   d_zero,
-				   m_Y_loc, n_Y_loc - pp, & Y_loc_pg[0+pp*ldim_Y], ldim_Y );
-	    
+				   m_Y_loc, max(n_Y_loc - pp,0), & Y_loc_pg[0+pp*ldim_Y], ldim_Y );
 	  }
 	  else {
 		gpu_dgemm( cublasH,
@@ -517,17 +523,17 @@ int rand_utv_gpu(
 			gpu_dgemm( cublasH, 
 				       n, n, d_one,
 					   m_A_loc, n_A_loc, A_loc_pg, ldim_A,
-					   m_Y_loc, n_Y_loc - pp, & Y_loc_pg[0+pp*ldim_Y], ldim_Y,
+					   m_Y_loc, max(n_Y_loc - pp,0), & Y_loc_pg[0+pp*ldim_Y], ldim_Y,
 					   d_zero, 
-					   m_G_loc, n_G_loc - pp, & G_loc_pg[0+pp*ldim_G], ldim_G );
+					   m_G_loc, max(n_G_loc - pp,0), & G_loc_pg[0+pp*ldim_G], ldim_G );
 			
 			// complete iteration; Y <-- A'*G
 			gpu_dgemm( cublasH, 
 					   t, n, d_one,
 					   m_A_loc, n_A_loc, A_loc_pg, ldim_A,
-					   m_G_loc, n_G_loc - pp, & G_loc_pg[0+pp*ldim_G], ldim_G,
+					   m_G_loc, max(n_G_loc - pp,0), & G_loc_pg[0+pp*ldim_G], ldim_G,
 					   d_zero,
-					   m_Y_loc, n_Y_loc - pp, & Y_loc_pg[0+pp*ldim_Y], ldim_Y );
+					   m_Y_loc, max(n_Y_loc - pp,0), & Y_loc_pg[0+pp*ldim_Y], ldim_Y );
 	      }
 		}
 
@@ -539,12 +545,12 @@ int rand_utv_gpu(
 
 		    // Y2 = Y2 - Y1*Y1'*Y2;
 			project_away( cublasH,
-						  m_Y_loc, n_Y_loc - pp, & Y_loc_pg[ 0 + pp * ldim_Y ], ldim_Y,
+						  m_Y_loc, max(n_Y_loc - pp,0), & Y_loc_pg[ 0 + pp * ldim_Y ], ldim_Y,
 						  m_Y_loc, pp, Y_loc_pg, ldim_Y ); 
 
 
 			// Y2 = orth(Y2);
-			gpu_orth( m_Y_loc, n_Y_loc - pp, & Y_loc_pg[ 0 + pp * ldim_Y ], ldim_Y,
+			gpu_orth( m_Y_loc, max(n_Y_loc - pp,0), & Y_loc_pg[ 0 + pp * ldim_Y ], ldim_Y,
 					  tau_h, T_d,
 					  magInfo );
 		  }
@@ -591,17 +597,6 @@ int rand_utv_gpu(
 	  }
 	}
 
-	// if oversampling is done, extract the basis basis of bl_size vectors
-	if ( pp > 0 && n_A > ( i + bl_size ) ) {
-	  // compute left singular vectors of sampling matrix; use first bl_size 
-	  // vectors as new sampling matrix to compute left transformation
-	  local_left_svecs_v2( cublasH,
-						   m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
-						   tau_h,
-						   work_h, iwork_h,
-						   T_pg, ldim_T,
-						   TVt_pg, ldim_TVt );
-	}
 
 #ifdef PROFILE
     tt_spl += stop_timer( time1 );
@@ -616,19 +611,19 @@ int rand_utv_gpu(
     //   [Vloc,~]   = LOCAL_nonpiv_QR(Y,b);
     // end
 
-	local_magqr_nopiv( m_Y_loc, n_Y_loc - pp, 
+	local_magqr_nopiv( m_Y_loc, n_Y_loc, 
 					   Y_loc_pg, ldim_Y,
 					   tau_h, magInfo ); 
 
 	// construct "TU'" matrix for UT representation of HH matrix
-	magma_dlarft( cublasH, m_Y_loc, n_Y_loc - pp, 
+	magma_dlarft( cublasH, m_Y_loc, n_Y_loc, 
 				  Y_loc_pg, ldim_Y,
 				  tau_h,
 				  T_pg, ldim_T,
 				  TVt_pg, ldim_TVt );
 
 #ifdef PROFILE
-    tt_qr1_fact += stop_timer(time1);
+    tt_qr1_fact += stop_timer( time1 );
     time1 = start_timer();
 #endif
     // Apply the pivot matrix to rotate maximal mass into the "J2" column
@@ -636,7 +631,7 @@ int rand_utv_gpu(
 
     my_dormqr_gpu( cublasH,
 				   r, n, 
-				   m_Y_loc, n_Y_loc-pp, Y_loc_pg, ldim_Y,
+				   m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
 				   m_A_right, n_A_right, A_right_pg, ldim_A,
 				   TVt_pg, ldim_TVt );
 
@@ -649,16 +644,60 @@ int rand_utv_gpu(
     // Update matrix V with transformations from the first QR.
 	my_dormqr_gpu( cublasH,
 				   r,n,
-				   m_Y_loc, n_Y_loc - pp, Y_loc_pg, ldim_Y,
+				   m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
 				   m_V_right, n_V_right, V_right_pg, ldim_V,
 				   TVt_pg, ldim_TVt );
 
-    if ( pp > 0 ) {
-    // downdate oversamples from Y to use in the next sampling matrix
-	oversample_downdate_gpu( cublasH,
-							 m_Y_loc, n_Y_loc - pp, Y_loc_pg, ldim_Y,
-							 m_Y_loc, pp, & Y_loc_pg[0+pp*ldim_Y], ldim_Y,
-							 TVt_pg, ldim_TVt );
+	// if oversampling is done, finish SVD of sampling matrix
+	// (most work is done after QR) and update V and A accordingly
+	if ( pp > 0 && ( n_A - i - bl_size ) > pp ) {
+	  
+	  magma_dcopymatrix( n_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y, Y_svecs_pg, ldim_Y_svecs ); 
+
+      local_left_svecs( m_Y_svecs, n_Y_svecs, Y_svecs_pg, ldim_Y_svecs,
+				work_h, iwork_h );
+
+      // update A and V with info from svecs of Y
+	  gpu_dgemm( cublasH,
+			   n, n, d_one,
+		   	   m_A_right, bl_size + pp, A_right_pg, ldim_A,
+			   m_Y_svecs, n_Y_svecs, Y_svecs_pg, ldim_Y_svecs,
+			   d_zero, 
+			   m_A_right, n_Y_svecs, Tmp_pg, m_A_right );
+
+	  magma_dcopymatrix( m_A_right, n_Y_svecs, Tmp_pg, m_A_right, A_right_pg, ldim_A ); 
+
+	  gpu_dgemm( cublasH,
+			   n, n, d_one,
+		   	   m_V_right, n_Y_svecs, V_right_pg, ldim_V,
+			   m_Y_svecs, n_Y_svecs, Y_svecs_pg, ldim_Y_svecs,
+			   d_zero,
+			   m_V_right, n_Y_svecs, Tmp_pg, m_V_right );
+	  
+	  magma_dcopymatrix( m_V_right, n_Y_svecs, Tmp_pg, m_V_right, V_right_pg, ldim_V ); 
+
+
+      // downdate oversamples from Y to use in the next sampling matrix 
+	  magma_dcopymatrix( m_Y_svecs, n_Y_svecs - bl_size, 
+					& Y_svecs_pg[0 + bl_size*ldim_Y_svecs], ldim_Y_svecs, 
+					Tmp_pg, m_Y_svecs ); 
+
+      my_dormqr_gpu( cublasH,
+	  			     l, t, 
+				     m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+				     m_Y_svecs, n_Y_svecs - bl_size, 
+					 & Y_svecs_pg[0 + bl_size * ldim_Y_svecs ], ldim_Y_svecs,
+				     TVt_pg, ldim_TVt );
+	  
+	  gpu_dgemm( cublasH,
+			     t, n, d_one,
+		   	     m_Y_svecs, n_Y_svecs - bl_size, Tmp_pg, m_Y_svecs,
+			     m_Y_svecs, n_Y_svecs - bl_size, 
+				 & Y_svecs_pg[ 0 + bl_size*ldim_Y_svecs ], ldim_Y_svecs,
+			     d_zero,
+			     m_Y_loc - bl_size, pp,
+				 & Y_loc_pg[bl_size + 0*ldim_Y], ldim_Y );
+	
 	}
 
 #ifdef PROFILE
@@ -815,6 +854,7 @@ int rand_utv_gpu(
 
   cudaFree( G_pg );
   cudaFree( Y_pg );
+  cudaFree( Y_svecs_pg );
   cudaFree( Vt_svd_pg );
   cudaFree( U_svd_pg );
   cudaFree( tau_pg );
@@ -840,6 +880,13 @@ int rand_utv_gpu(
   cudaFree( devInfo );
 
 #ifdef PROFILE
+  #ifdef PROFILE_FOR_GRAPHING
+  printf("%% n = %d \n", n_A );
+  printf("%le %le %le %le \n", tt_spl, 
+							   tt_qr1_fact+tt_qr1_updt_a+tt_qr1_updt_v, 
+							   tt_qr2_fact+tt_qr2_updt_a+tt_qr2_updt_u, 
+							   tt_svd_fact+tt_svd_updt_a+tt_svd_updt_uv);
+  #else
   printf( "%% tt_build_y:	%le \n", tt_spl );
   printf( "%% tt_qr1:	%le \n", tt_qr1_fact + tt_qr1_updt_a + 
 								 tt_qr1_updt_v );
@@ -861,6 +908,7 @@ int rand_utv_gpu(
 		   tt_qr1_fact + tt_qr1_updt_a + tt_qr1_updt_v + 
 		   tt_qr2_fact + tt_qr2_updt_a + tt_qr2_updt_u +
 		   tt_svd_fact + tt_svd_updt_a + tt_svd_updt_uv );
+  #endif
 #endif
 
 

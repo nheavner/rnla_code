@@ -25,7 +25,7 @@
 // =======================================================================
 // Compilation declarations
 
-#define PROFILE
+//#define PROFILE
 
 // =======================================================================
 // Definition of global variables
