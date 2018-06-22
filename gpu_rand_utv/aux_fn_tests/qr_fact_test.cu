@@ -1,7 +1,9 @@
 /*
+    -L/usr/local/cuda/lib64 \
+	-L/usr/local/magma/lib \
 how to compile:
-nvcc -c qr_fact_test.cu
-nvcc -o qr_fact_test.x qr_fact_test.o -lcusolver -lcublas -lgomp
+nvcc -c qr_fact_test.cu -I/opt/intel/mkl/incdlue -I/usr/local/magma/include -dc -DADD_ -DMAGMA_WITH_MKL
+nvcc -o qr_fact_test.x qr_fact_test.o -L/usr/local/magma/lib -lmagma -lcusolver -lcublas -lgomp
 */
 
 #include <stdio.h>
@@ -12,6 +14,9 @@ nvcc -o qr_fact_test.x qr_fact_test.o -lcusolver -lcublas -lgomp
 
 #include <cublas_v2.h>
 #include <cusolverDn.h>
+
+#include <magma.h>
+#include <magma_lapack.h>
 
 #define min( a,b ) ( (a) > (b) ? (b) : (a) )
 
@@ -192,18 +197,21 @@ int main() {
 
   // declare, initialize variables
   int m_A, n_A, ldim_A;
-  m_A = 5; n_A = 5; ldim_A = m_A;
+  m_A = 10000; n_A = 128; ldim_A = m_A;
   const char * A_name = "A";
   double * A_pc, * A_pg, * A_pgc;
   char n = 'N', t = 'T', l = 'L', r = 'R';
-  double * tau_pg = NULL; // tau is the scaling factor for each HH vector
+  double * tau_h = NULL; // tau is the scaling factor for each HH vector
 						  // such that H = I - tau*q*q', where q is the 
 						  // vector stored in the lower portion of A after
 						  // factorization
+  magma_int_t * magInfo = (magma_int_t * ) malloc( sizeof( magma_int_t ) );
 
   curandState_t * states; // we store a random state for every thread
   unsigned long long rand_seed = 7;
   unsigned long long * rs_pt = & rand_seed;
+
+  magma_init();
 
   // allocate space on GPU for the random states
   cudaMalloc( (void **) & states, m_A * n_A * sizeof( curandState_t ) );
@@ -216,17 +224,17 @@ int main() {
   cudaMalloc( & A_pgc, m_A * n_A * sizeof( double ) );
 
   // allocate tau array
-  cudaMalloc( ( void** ) & tau_pg, m_A * sizeof( double ) );
+  tau_h = (double *) malloc( m_A * sizeof( double ) );
 
   // fill gpu array with random standard normal numbers
   Normal_random_matrix( m_A, n_A, A_pg, ldim_A, states, rs_pt );
   
   // check
   cudaMemcpy( A_pc, A_pg, m_A * n_A * sizeof( double ), cudaMemcpyDeviceToHost );
-  print_double_matrix( A_name, m_A, n_A, A_pc, ldim_A );
+  //print_double_matrix( A_name, m_A, n_A, A_pc, ldim_A );
   
   // compute QR factorization
-  gpu_dgeqrf( m_A, n_A, A_pg, ldim_A, tau_pg );
+  magma_dgeqrf2_gpu( m_A, n_A, A_pg, ldim_A, tau_h, magInfo );
 	
   // copy result so we can check error
   cudaMemcpy( A_pgc, A_pg, m_A * n_A * sizeof( double ), cudaMemcpyDeviceToDevice );
@@ -235,21 +243,22 @@ int main() {
   Make_upper_tri( m_A, n_A, ldim_A, A_pgc );
 
   // print out R factor to make sure it's upper tri
-  cudaMemcpy( A_pc, A_pgc, m_A * n_A * sizeof( double ), cudaMemcpyDeviceToHost );
-  print_double_matrix( A_name, m_A, n_A, A_pc, ldim_A );
+  //cudaMemcpy( A_pc, A_pgc, m_A * n_A * sizeof( double ), cudaMemcpyDeviceToHost );
+  //print_double_matrix( A_name, m_A, n_A, A_pc, ldim_A );
 
   // do multiplication to get original matrix 
-  gpu_dormqr( l, n, 
-				m_A, n_A, A_pg, ldim_A,
-				tau_pg,
-				A_pgc, ldim_A );
+  //gpu_dormqr( l, n, 
+	//			m_A, n_A, A_pg, ldim_A,
+	//			tau_pg,
+	//			A_pgc, ldim_A );
   
   // copy result to host
-  cudaMemcpy( A_pc, A_pgc, m_A * n_A * sizeof( double ), cudaMemcpyDeviceToHost );
+  //cudaMemcpy( A_pc, A_pgc, m_A * n_A * sizeof( double ), cudaMemcpyDeviceToHost );
 
   // print out result
-  print_double_matrix( A_name, m_A, n_A, A_pc, ldim_A );
+  //print_double_matrix( A_name, m_A, n_A, A_pc, ldim_A );
 
+  magma_finalize();
 
   // free memory
   free( A_pc );
@@ -257,7 +266,8 @@ int main() {
   cudaFree( A_pgc );
   cudaFree( states );
 
-  cudaFree( tau_pg );
+  free( magInfo );
+  free( tau_h );
 
   return 0;
 }
