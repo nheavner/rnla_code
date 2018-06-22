@@ -2,7 +2,7 @@ clear
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% read in data %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 addpath ./bl_size_test_data
-bl_test_times_n_70k
+bl_test_times_n_25k
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% plot %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 figure(1);
