@@ -881,11 +881,11 @@ int rand_utv_gpu(
 
 #ifdef PROFILE
   #ifdef PROFILE_FOR_GRAPHING
-  printf("%% n = %d \n", n_A );
+  printf("n = %d \n", n_A );
   printf("%le %le %le %le \n", tt_spl, 
-							   tt_qr1_fact+tt_qr1_updt_a+tt_qr1_updt_v, 
-							   tt_qr2_fact+tt_qr2_updt_a+tt_qr2_updt_u, 
-							   tt_svd_fact+tt_svd_updt_a+tt_svd_updt_uv);
+							   tt_qr1_fact,//+tt_qr1_updt_a+tt_qr1_updt_v, 
+							   tt_qr2_fact,//+tt_qr2_updt_a+tt_qr2_updt_u, 
+							   tt_svd_fact);//+tt_svd_updt_a+tt_svd_updt_uv);
   #else
   printf( "%% tt_build_y:	%le \n", tt_spl );
   printf( "%% tt_qr1:	%le \n", tt_qr1_fact + tt_qr1_updt_a + 

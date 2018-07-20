@@ -27,9 +27,9 @@ int main() {
 
   int i, j;
 
-  int bl_size = 512;
-  int n_A[] = {2000,3000,4000,5000,6000,8000,10000,12000,15000};
-  int q[] = {2};
+  int bl_size = 128;
+  int n_A[] = {20000};//,20000};//{2000,3000,4000,5000,6000,8000,10000,12000,15000};
+  int q[] = {0};
   int p = 0;
 
   // for timing
@@ -45,7 +45,7 @@ int main() {
 
 	printf( "%% q = %d \n", q[j] );
 
-	for ( i=0; i < sizeof( n_A ) / sizeof( int ); i++ ) {
+	for ( i=0; i < sizeof(n_A ) / sizeof( int ); i++ ) {
 
 	  // Create matrix A, matrix U, and matrix V.
 	  buff_A    = ( double * ) malloc( n_A[ i ] * n_A[ i ] * sizeof( double ) );
