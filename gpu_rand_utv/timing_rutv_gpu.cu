@@ -27,10 +27,10 @@ int main() {
 
   int i, j;
 
-  int bl_size = 128;
+  int bl_size = 256;
   int n_A[] = {2000,3000,4000,5000,6000,8000,10000,12000,15000};
-  int q[] = {0,1};//2,3,4};
-  int p = 128;
+  int q[] = {0,1,2};//2,3,4};
+  int p = 0;
 
   // for timing
   timespec t1, t2;

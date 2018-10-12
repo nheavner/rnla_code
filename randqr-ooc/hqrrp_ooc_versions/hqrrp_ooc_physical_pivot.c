@@ -47,7 +47,6 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <stdint.h>
 #include <math.h>
 #include <time.h>
-#include <string.h>
 
 #include "hqrrp_ooc.h"
 #include <mkl.h>
@@ -215,9 +214,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
           m_G, n_G, ldim_G,
 		  m_A1112, n_A1112, ldim_A1112,
 		  m_A_mid, n_A_mid, ldim_A_mid,
-		  m_Q, n_Q, ldim_Q,
-		  m_Ql,
-		  m_T, n_T, ldim_T,
+		  m_A_mid_old, n_A_mid_old, ldim_A_mid_old,
 		  m_work, n_work, ldim_work,
 		  m_A21, n_A21, ldim_A21,
 		  n_Ycl,
@@ -233,8 +230,8 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
           * buff_t, * buff_tl,  // tau vector for HH matrices 
           * buff_G, * buff_G1, * buff_G2, // random matrix G
 		  * buff_A_mid,         // A_mid = [A12; A22; A32]
-		  * buff_Q, * buff_Ql,  // holds the HH reflectors
-		  * buff_T,             // holds the T matrix in the VTV' representation of HH matrix 
+		  * buff_A_mid_old,     // A_mid before the permutations of the current loop had been
+								// applied
 		  * buff_A1112, * buff_A1112l,	  // A1112 = [ A11; A12 ]
 		  * buff_work,			// for holding chunks of cols of A for applying updates
 		  * buff_A21;			 
@@ -243,23 +240,12 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   int     * buff_p, * buff_pl; // pivot vectors
   int	  * buff_p_Y, * buff_p_Yl; // pivots determined by Y
   int     * buff_p_bl; // pivots for the tall thin block
-
-  char file_path[ sizeof( dir_name ) / sizeof( dir_name[0] ) + 
-		sizeof( A_fname ) / sizeof( A_fname[0] ) ];
-  strcpy( file_path, dir_name );
-  strcat( file_path, A_fname );
-
-  char[] A_out_fname = "A_mat_out";
-  char file_path_out[ sizeof( dir_name ) / sizeof( dir_name[0] ) + 
-		sizeof( A_out_fname ) / sizeof( A_out_fname[0] ) ];
-  strcpy( file_path_out, dir_name );
-  strcat( file_path_out, A_out_fname );
   
   int     i, j, k,
 		  b, last_iter, mn_A;
   double  d_zero = 0.0, d_one = 1.0;
   int     i_one = 1;
-  FILE    * A_fp, * Ac_fp;
+  FILE    * A_fp;
   size_t err_check;
   int num_cols_read = 5000;
 
@@ -293,10 +279,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   buff_p = buff_jpvt;
   buff_t = buff_tau;
 
-  A_fp = fopen( file_path, "r+" );
-  Ac_fp = fopen( file_path_out , "w+" );
-
-
+  A_fp = fopen( A_fname, "r+" );
 
   // Quick return.
   if( mn_A == 0 ) {
@@ -307,7 +290,6 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   srand( 12 );
 
   // Create auxiliary objects.
-  // TODO: add error checking for memory allocation
   m_Y     = nb_alg + pp;
   n_Y     = n_A;
   buff_Y  = ( double * ) malloc( m_Y * n_Y * sizeof( double ) );
@@ -334,16 +316,11 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   buff_A_mid = ( double * ) malloc( m_A_mid * n_A_mid * sizeof( double ) );
   ldim_A_mid = m_A_mid;
 
-  m_Q    = m_A;
-  n_Q    = nb_alg;
-  buff_Q = ( double * ) malloc( m_Q * n_Q * sizeof( double ) );
-  ldim_Q = m_Q;
-
-  m_T    = nb_alg;
-  n_T    = nb_alg;
-  buff_T = ( double * ) malloc( m_T * n_T * sizeof( double ) );
-  ldim_T = m_T;
-
+  m_A_mid_old    = m_A;
+  n_A_mid_old    = nb_alg;
+  buff_A_mid_old = ( double * ) malloc( m_A_mid_old * n_A_mid_old * sizeof( double ) );
+  ldim_A_mid_old = m_A_mid_old;
+  
   m_A1112    = m_A;
   n_A1112    = nb_alg;
   buff_A1112 = ( double * ) malloc( m_A1112 * n_A1112 * sizeof( double ) );
@@ -365,24 +342,6 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
 
   buff_p_Y  = ( int * ) malloc( m_A * sizeof( int ) ); 
   buff_p_bl  = ( int * ) malloc( nb_alg * sizeof( int ) ); 
-
-  // copy matrix to Ac_fp
-  // TODO: come up with solution that doesn't actually have to copy over all the data, if possible
-  fseek( A_fp, 0, SEEK_SET );
-  fseek( Ac_fp, 0, SEEK_SET );
-
-  for ( j = 0; j < n_A; j += num_cols_read ) {
-    int num_cols_block = min( nb_alg, n_A - j );
-
-	err_check = fread( buff_work, sizeof( double ), m_work * num_cols_block, A_fp );		
-	if ( err_check != m_work * num_cols_block ) {
-	  printf( "Error! Initial copy of A into new file failed!\n" );
-	  return 1;
-	}
-
-	fwrite( buff_work, sizeof( double ), m_work * num_cols_block, Ac_fp );			
-
-  }
 
   // Initialize matrices G and Y.
   NoFLA_Normal_random_matrix( nb_alg + pp, m_A, buff_G, ldim_G );
@@ -415,6 +374,9 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
     m_A_mid = m_A;
 	n_A_mid = min( nb_alg, n_A - j );
 
+    m_A_mid_old = m_A;
+	n_A_mid_old = min( nb_alg, n_A - j );
+
 	m_A1112l = m_A - j;
 	n_A1112l = b;
 	buff_A1112l = & buff_A1112[ j + 0 * ldim_A1112 ];
@@ -435,7 +397,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
 	}
 
     if( last_iter == 0 ) {
-      // Compute QRP of YR 
+      // Compute QRP of YR, and apply permutations to matrix AR.
       // A copy of YR is made into Ycl, and permutations are applied to YR.
 #ifdef PROFILE
   time1 = start_timer();
@@ -461,14 +423,25 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
     // Apply same permutations to A01 and Y1, and build T1_T.
     //
 
-	// read out block of matrix [ A12; A22; A32 ], applying the permutation as we read
-	for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
-	  
-	  fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
-	  err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ], 
-						 sizeof( double ), m_A_mid, A_fp );			   
-	  if ( err_check != m_A_mid ) {
-		printf( "Error! read of block [A12; A22; A32] failed!\n Number of entries read: %d; number of entries attempted: %d \n", (int) err_check, m_A_mid );
+    if ( last_iter == 0 ) {
+
+	  // read out block of matrix [ A12; A22; A32 ], applying the permutation as we read
+	  for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
+		
+		fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
+		err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ], 
+						   sizeof( double ), m_A_mid, A_fp );			   
+		if ( err_check != m_A_mid ) {
+		  printf( "Error! read of block [A12; A22; A32] failed!\n Number of entries read: %d; number of entries attempted: %d \n", (int) err_check, m_A_mid );
+		  return 1;
+		}
+	  }
+    }
+	else {
+	  fseek( A_fp, ( 0 + ( j ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
+	  err_check = fread( buff_A_mid, sizeof( double ), m_A_mid * n_A_mid, A_fp );			   
+	  if ( err_check != m_A_mid * n_A_mid ) {
+		printf( "Error! read of block [A12; A22; A32] failed!\n Number of entries read: %d; number of entries attempted: %d \n", (int) err_check, m_A_mid * n_A_mid );
 		return 1;
 	  }
 	}
@@ -478,40 +451,12 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   time1 = start_timer();
 #endif
 
-    // update [A22; A32] with previous transformations Q_i
-	fseek( A_fp, 0, SEEK_SET );
-	   
-    for ( i=0; i < j; i += nb_alg ) {
-
-      m_Ql = m_A - i;
-      buff_Ql = & buff_Q[ i + 0 * ldim_Q ];
-
-	  // read out Q_i from output file
-      // TODO: make the reading out more efficient (read as many columns as possible?) 
-	  fseek( Ac_fp, ( i + i * ldim_A ) * sizeof( double ), SEEK_SET );
-	  err_check = fread( buff_Ql, sizeof( double ), ( m_A - i ) * nb_alg , Ac_fp );			   
-	  if ( err_check != ( m_A - i ) * nb_alg ) {
-		printf( "Error! read of Q failed!\n" );
-		return 1;
-	  }
-
-	  // generate "W" matrix (which we call T) for Q_i
-      dlarft_( "Forward", "Columnwise", & m_Ql, & n_Q, buff_Q, & ldim_Q, 
-               & buff_t[ i ], buff_T, & ldim_T );
-	  
-	  // apply Q_i to [A22; A32]
-	  Apply_Q_WY_lh( m_Ql, n_Q, buff_Ql, ldim_Q,
-					  nb_alg, nb_alg, buff_T, ldim_T,
-					  m_A_mid - i, n_A_mid, & buff_A_mid[ i + 0 * ldim_A_mid ], ldim_A_mid );
-
-	}
-
-	// compute QRP; apply permutations to A12 
-	QRP_WY( panel_pivoting, -1,
-	  m_A_mid - j, n_A_mid, & buff_A_mid[ j + 0 * ldim_A_mid ], ldim_A_mid, buff_p_bl, buff_tl,
-	  1, 1, buff_pl, 1,
-	  1, j, buff_A_mid, ldim_A_mid,
-	  0, buff_Wl, ldim_W );
+	  // compute QRP; apply permutations to A12 
+	  QRP_WY( panel_pivoting, -1,
+        m_A_mid - j, n_A_mid, & buff_A_mid[ j + 0 * ldim_A_mid ], ldim_A_mid, buff_p_bl, buff_tl,
+        1, 1, buff_pl, 1,
+        1, j, buff_A_mid, ldim_A_mid,
+        1, buff_Wl, ldim_W );
 
 #ifdef PROFILE
   t_qr_A += stop_timer( time1 );
@@ -668,15 +613,13 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
 
   // Remove auxiliary objects.
   fclose( A_fp );
-  fclose( Ac_fp );
 
   free( buff_G );
   free( buff_Y );
   free( buff_Yc );
   free( buff_W );
   free( buff_A_mid );
-  free( buff_Q );
-  free( buff_T );
+  free( buff_A_mid_old );
   free( buff_A1112 );
   free( buff_A21 );
   free( buff_work );

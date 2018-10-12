@@ -6,7 +6,7 @@ subplot(2,1,1)
 plot(b,t_tot,'kd-',b,t_comm,'ro-',b,t_flop,'bs-')
 xlabel('block size')
 ylabel('time [s]')
-title('Profiling data for ooc cpqr')
+title('Profiling data for ooc cpqr, n=25000')
 legend('total time','comm time','flop time','Location','East')
 
 subplot(2,1,2)

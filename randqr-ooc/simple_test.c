@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <time.h>
 #include <mkl.h>
@@ -17,7 +18,7 @@
 // ============================================================================
 // Declaration of local prototypes.
 
-static void matrix_generate_ooc( int m_A, int n_A, char * A_fname );
+static void matrix_generate_ooc( int m_A, int n_A, char * dir_name, char * A_fname );
 
 static void matrix_generate( int m_A, int n_A, double * buff_A, int ldim_A );
 
@@ -41,7 +42,14 @@ int main( int argc, char *argv[] ) {
   int     * buff_p;
   int     * buff_pc;
   FILE	  * A_fp; // pointer to the file that stores A
-  char    A_fname[] = "/media/hdd/A_mat";//"/media/hdd/A_mat";
+  char    dir_name[] = "./"; //"/media/hdd/";
+  char    A_fname[] = "A_mat";
+
+  char file_path[ sizeof( dir_name ) / sizeof( dir_name[0] ) + 
+		sizeof( A_fname ) / sizeof( A_fname[0] ) ];
+  strcpy( file_path, dir_name );
+  strcat( file_path, A_fname );
+
   size_t  read_check;
   int     eq_check = 1;
   int i;
@@ -51,9 +59,9 @@ int main( int argc, char *argv[] ) {
   double t_ooc_fact = 0.0;
 
   // Create matrix A, vector p, vector s, and matrix Q.
-  m_A      = 10000;
-  n_A      = 10000;
-  nb_alg   = 128;
+  m_A      = 100;
+  n_A      = 100;
+  nb_alg   = 20;
   k        = n_A;
   pp	   = 0;
 
@@ -75,7 +83,7 @@ int main( int argc, char *argv[] ) {
   ldim_Q   = max( 1, m_A );
 
   // Generate binary file which stores the matrix (out of core)
-  matrix_generate_ooc( m_A, n_A, A_fname ); 
+  matrix_generate_ooc( m_A, n_A, dir_name, A_fname ); 
   A_fp = fopen( A_fname, "r" );
 
   // transfer matrix to in-core
@@ -116,7 +124,7 @@ int main( int argc, char *argv[] ) {
 
   clock_gettime( CLOCK_MONOTONIC, & t1 );
 
-  hqrrp_ooc( A_fname, m_A, n_A, ldim_A, buff_p, buff_tau, 
+  hqrrp_ooc( dir_name, A_fname, m_A, n_A, ldim_A, buff_p, buff_tau, 
            nb_alg, k, pp, 1 );
 
   clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -149,8 +157,8 @@ int main( int argc, char *argv[] ) {
 #ifdef CHECK_OOC
   A_fp = fopen( A_fname, "r" );
   for ( i=0; i < n_A; i++ ) {
-    fseek( A_fp, ( 0 + ( buff_p[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
-    fread( & buff_A[ 0 + i * ldim_A ], sizeof( double ), m_A, A_fp );
+    fseek( A_fp, ( 0 +  i * ldim_A ) * sizeof( double ), SEEK_SET );
+    read_check = fread( & buff_A[ 0 + i * ldim_A ], sizeof( double ), m_A, A_fp );
   }
   fclose( A_fp );
 
@@ -175,7 +183,7 @@ int main( int argc, char *argv[] ) {
 #ifdef PRINT_DATA
   A_fp = fopen( A_fname, "r" );
   for ( i=0; i < n_A; i++ ) {
-    fseek( A_fp, ( 0 + ( buff_p[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
+    fseek( A_fp, ( 0 + i * ldim_A ) * sizeof( double ), SEEK_SET );
     fread( & buff_A[ 0 + i * ldim_A ], sizeof( double ), m_A, A_fp );
   }
   fclose( A_fp );
@@ -189,7 +197,7 @@ int main( int argc, char *argv[] ) {
 #endif
 
   // remove file that stored matrix
-  remove( A_fname );
+  remove( file_path );
 
   // Free matrices and vectors.
   free( buff_A );
@@ -207,16 +215,20 @@ int main( int argc, char *argv[] ) {
 }
 
 // ============================================================================
-static void matrix_generate_ooc( int m_A, int n_A, char * A_fname ) {
+static void matrix_generate_ooc( int m_A, int n_A, char * dir_name, char * A_fname ) {
   // populate the empty file pointed to by A_fp with a matrix
   // with random values 
 
   FILE * A_fp;
   double * col_p; // for storing one col at a time before transferring to disk
   int i,j;
+  char file_path[ sizeof( dir_name ) / sizeof( dir_name[0] ) + 
+		sizeof( A_fname ) / sizeof( A_fname[0] ) ];
 
+  strcpy( file_path, dir_name );
+  strcat( file_path, A_fname );
 
-  A_fp = fopen( A_fname, "w" );
+  A_fp = fopen( file_path, "w" );
   col_p = ( double * ) malloc( m_A * sizeof( double ) );
 
   srand( 10 );

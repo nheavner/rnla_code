@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <mkl.h>
 
@@ -17,7 +18,7 @@
 // ============================================================================
 // Declaration of local prototypes.
 
-static void matrix_generate_ooc( int m_A, int n_A, char * A_fname );
+static void matrix_generate_ooc( int m_A, int n_A, char * dir_name, char * A_fname );
 
 // ============================================================================
 int main() {
@@ -25,8 +26,19 @@ int main() {
   int     ldim_A;
   double  * buff_A, * buff_tau;
   int  * buff_p;
-  char A_ssd_fname[] = "./A_mat_ssd";
-  char A_hdd_fname[] = "/media/hdd/A_mat_hdd";
+  char dir_name_ssd[] = "./";
+  char dir_name_hdd[] = "/media/hdd/";
+  char A_fname_ssd[] = "A_mat_ssd";
+  char A_fname_hdd[] = "A_mat_hdd";
+
+  char file_path_ssd[ sizeof( dir_name_ssd ) / sizeof( dir_name_ssd[0] ) + 
+		sizeof( A_fname_ssd ) / sizeof( A_fname_ssd[0] ) ];
+  strcpy( file_path_ssd, dir_name_ssd );
+  strcat( file_path_ssd, A_fname_ssd );
+  char file_path_hdd[ sizeof( dir_name_hdd ) / sizeof( dir_name_hdd[0] ) + 
+		sizeof( A_fname_hdd ) / sizeof( A_fname_hdd[0] ) ];
+  strcpy( file_path_hdd, dir_name_hdd );
+  strcat( file_path_hdd, A_fname_hdd );
 
   size_t read_check;
 
@@ -35,7 +47,7 @@ int main() {
   int bl_size = 250;
   int k = 1000;
   int p = 0;
-  int n_A[] = {150000};//{1000, 2000, 4000, 5000, 8000, 10000, 15000, 20000, 30000, 40000, 45000, 50000, 70000, 100000, 110000, 120000, 150000};
+  int n_A[] = {40000};//{1000, 2000, 4000, 5000, 8000, 10000, 15000, 20000, 30000, 40000, 45000, 50000, 70000, 100000, 110000, 120000, 150000};
 
 
   // for timing
@@ -62,39 +74,16 @@ int main() {
 	buff_p    = ( int * )  malloc( n_A[ i ] * sizeof( int ) ); 
 
 	buff_tau  = ( double * ) malloc( n_A[ i ] * sizeof( double ) );
-/*	
-	// begin test
-	double test_time;
-    double * mat_col;
-    int n = 100000;
-
-    mat_col = ( double * ) malloc( n*20000* sizeof(double) );
-
-	A_fp = fopen(A_hdd_fname,"r");
-
-	clock_gettime(CLOCK_MONOTONIC, & t1 );
-
-    for ( i=0;i <5; i++ ) {
-	  fread( mat_col, sizeof(double), n*20000, A_fp );
-    }
-
-	clock_gettime( CLOCK_MONOTONIC, & t2 );
-	diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
-	test_time = ( double ) diff / (1E9);
-
-    printf("test time is %.5e \n", test_time);
-
-    fclose(A_fp);
-    free( mat_col );
-	// end test
-*/
 
 	// Generate matrix.
-	matrix_generate_ooc( n_A[ i ], n_A[ i ], A_ssd_fname );
-	matrix_generate_ooc( n_A[ i ], n_A[ i ], A_hdd_fname );
+	matrix_generate_ooc( n_A[ i ], n_A[ i ], dir_name_ssd, A_fname_ssd );
+	matrix_generate_ooc( n_A[ i ], n_A[ i ], dir_name_hdd, A_fname_hdd );
 
+    // copy matrix to RAM
     if ( n_A[ i ] <= 45000 ) {
-	  A_fp = fopen( A_ssd_fname, "r" );
+	  A_fp = fopen( file_path_ssd, "r" );
+      read_check = fread( buff_A, sizeof( double ), n_A[ i ] * n_A[ i ], A_fp ); 
+	  fclose( A_fp );
 	}
 
 	for ( j=0; j < n_A[i]; j++ ) {
@@ -108,8 +97,8 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do SSD factorization
-		hqrrp_ooc( A_ssd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-					bl_size, k, p, 1 );
+		hqrrp_ooc( dir_name_ssd, A_fname_ssd, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
+					bl_size, n_A[i], p, 1 );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -120,8 +109,8 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do HDD factorization
-		hqrrp_ooc( A_hdd_fname, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-		  			bl_size, k, p, 1 );
+		hqrrp_ooc( dir_name_hdd, A_fname_hdd, n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
+		  			bl_size, n_A[i], p, 1 );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -134,7 +123,7 @@ int main() {
 		// do in-core factorization
 		if ( n_A[ i ] <= 45000 ) {
 		  NoFLA_HQRRP_WY_blk_var4( n_A[i], n_A[i], buff_A, n_A[i], buff_p, buff_tau,
-		   			bl_size, k, p, 1 );
+		   			bl_size, n_A[i], p, 1 );
 		}
 
 		// stop timing and record time
@@ -150,15 +139,15 @@ int main() {
     free( buff_tau );
 
     // remove file that stored matrix
-	remove( A_ssd_fname );
-	remove( A_hdd_fname );
+	remove( file_path_ssd );
+	remove( file_path_hdd );
     
   }
 
   // write results to file
-  ofp = fopen( "cpqr_ooc_partial_times.m", & mode );
+  ofp = fopen( "cpqr_ooc_times.m", & mode );
 
-  fprintf( ofp, "%% block size was %d \n \n", bl_size );
+  fprintf( ofp, "%% block size was %d \n \n %% physical pivoting was used \n", bl_size );
 
 	// write out vector of values of n used for these tests
 	fprintf( ofp, "n_cpqr_ooc = [ \n" );
@@ -208,7 +197,7 @@ int main() {
 }
 
 // ============================================================================
-static void matrix_generate_ooc( int m_A, int n_A, char * A_fname ) {
+static void matrix_generate_ooc( int m_A, int n_A, char * dir_name, char * A_fname ) {
   // populate the empty file pointed to by A_fp with a matrix
   // with random values 
 
@@ -217,8 +206,12 @@ static void matrix_generate_ooc( int m_A, int n_A, char * A_fname ) {
   int i,j;
   size_t err_check;
 
+  char file_path[ sizeof( dir_name ) / sizeof( dir_name[0] ) + 
+		sizeof( A_fname ) / sizeof( A_fname[0] ) ];
+  strcpy( file_path, dir_name );
+  strcat( file_path, A_fname );
 
-  A_fp = fopen( A_fname, "w" );
+  A_fp = fopen( file_path, "w" );
   col_p = ( double * ) malloc( m_A * sizeof( double ) );
 
   srand( 10 );

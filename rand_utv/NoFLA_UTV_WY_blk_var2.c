@@ -56,7 +56,7 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 // Compilation declarations.
 
 #define PROFILE
-//#define PROFILE_FOR_GRAPH
+#define PROFILE_FOR_GRAPH
 
 // ============================================================================
 // Declaration of local prototypes.
@@ -543,11 +543,16 @@ int NoFLA_UTV_WY_blk_var2(
 
 #ifdef PROFILE
   #ifdef PROFILE_FOR_GRAPH
-    printf("%% n = %d \n", n_A);
-    printf("%le %le %le %le \n", tt_by, 
-								 tt_qr1_fact+tt_qr1_updt_a+tt_qr1_updt_v, 
-								 tt_qr2_fact+tt_qr2_updt_a+tt_qr2_updt_u, 
-								 tt_svd_fact+tt_svd_updt_a+tt_svd_updt_uv);
+    printf("%le %le %le %le %le %le %le \n", tt_by, 
+								 tt_qr1_fact, 
+								 tt_qr1_updt_a,
+								 tt_qr2_fact, 
+								 tt_qr2_updt_a,
+								 tt_svd_fact,
+								 tt_by +
+								 tt_qr1_fact + tt_qr1_updt_a + tt_qr1_updt_v +
+								 tt_qr2_fact + tt_qr2_updt_a + tt_qr2_updt_u +
+								 tt_svd_fact + tt_svd_updt_a + tt_svd_updt_uv );
   #else
 	printf( "%% tt_build_y:     %le\n", tt_by );
 	printf( "%% tt_qr1:         %le\n", tt_qr1_fact + tt_qr1_updt_a +

@@ -74,20 +74,6 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 // ============================================================================
 // Declaration of local prototypes.
 
-static void print_double_matrix( char * name, int m_A, int n_A, 
-                double * buff_A, int ldim_A ) {
-  int  i, j;
-
-  printf( "%s = [\n", name );
-  for( i = 0; i < m_A; i++ ) {
-    for( j = 0; j < n_A; j++ ) {
-      printf( "%le ", buff_A[ i + j * ldim_A ] );
-    }
-    printf( "\n" );
-  }
-  printf( "];\n" );
-}
-
 static int NoFLA_Normal_random_matrix( int m_A, int n_A, 
                double * buff_A, int ldim_A );
 
@@ -382,12 +368,12 @@ int NoFLA_HQRRP_WY_blk_var4( int m_A, int n_A, double * buff_A, int ldim_A,
           m_A12 + m_A22, n_A12, buff_A12, ldim_A );
     }
 
-
     //
     // Downdate matrix Y.
     //
     if ( ! last_iter ) {
       //// MyFLA_Downdate_Y( A11, A21, A12, T1_T, Y2, G1, G2 );
+
       NoFLA_Downdate_Y(
           m_A11, n_A11, buff_A11, ldim_A,
           m_A21, n_A21, buff_A21, ldim_A,

@@ -1,7 +1,7 @@
 /*
 how to compile:
-gcc -c dgemm_test.c
-gcc -o dgemm_test.x dgemm_test.o -Wl,--start-group /opt/intel/mkl/lib/intel64/libmkl_intel_lp64.a /opt/intel/mkl/lib/intel64/libmkl_gnu_thread.a /opt/intel/mkl/lib/intel64/libmkl_core.a -Wl,--end-group -ldl -lpthread -lm -lgomp
+gcc -c dgeqrf_test.c
+gcc -o dgeqrf_test.x dgeqrf_test.o -Wl,--start-group /opt/intel/mkl/intel64/libmkl_intel_lp64.a /opt/intel/mkl/lib/intel64/libmkl_gnu_thread.a /opt/intel/mkl/lib/intel64/libmkl_core.a -Wl,--end-group -ldl -lpthread -lm -lgomp
 */
 
 #include <math.h>
@@ -35,57 +35,52 @@ static double stop_timer( struct timespec t1 );
 // ===================================================================
 
 int main( int argc, char *argv[] ) {
-  int64_t	nb_alg, pp, m_A, n_A, ldim_A, m_B, n_B, ldim_B, ldim_C;
+  int	nb_alg, pp, m_A, n_A, ldim_A;
+  int   lwork = -1, info;
   int   i, j;
-  double * buff_A, * buff_B, * buff_C;
+  double * buff_A, * buff_tau, * buff_work;
   char all = 'A', t = 'T', n = 'N';
   double d_one = 1.0, d_zero = 0.0;
   struct timespec time1;
-  double t_dgemm = 0.0;
+  double t_dgeqrf = 0.0;
 
   // create matrices A, B, C
   m_A = 10000;
-  n_A = 10000;
+  n_A = 128;
   ldim_A = l_max(1,m_A);
-  m_B = 10000;
-  n_B = 10000;
-  ldim_B = l_max(1,m_B);
-  ldim_C = ldim_A;
 
   buff_A = ( double * ) malloc( m_A * n_A * sizeof(double) );
-  buff_B = ( double * ) malloc( m_B * n_B * sizeof(double) );
-  buff_C = ( double * ) malloc( m_A * n_B * sizeof(double) );
+  buff_tau = ( double * ) malloc( l_min( m_A, n_A ) );
+  buff_work = ( double * ) malloc( sizeof(double) );
 
-  //generate matrices A,B
+  // get optimal size of work array
+  dgeqrf_( & m_A, & n_A, buff_A, & ldim_A,
+		   buff_tau,
+		   buff_work, & lwork, & info );
+  lwork = buff_work[ 0 ];
+  
+  free( buff_work );
+  buff_work = ( double * ) malloc( lwork * sizeof(double) );
+
+  //generate matrix A
   Normal_random_matrix( m_A, n_A, buff_A, ldim_A );
-  Normal_random_matrix( m_B, n_B, buff_B, ldim_B );
-
-  //print_double_matrix("A",m_A,n_A,buff_A,m_A);
-  //print_double_matrix("B",m_B,n_B,buff_B,m_B);
 
   time1 = start_timer(); 
 
-  for (i=0; i < 10; i++) {
-	//compute C = A * B
-	dgemm_( & n, & n, & m_A, & n_B, & n_A, 
-		& d_one, buff_A, & ldim_A,
-			 buff_B, & ldim_B,
-		& d_zero,buff_C, & ldim_C);
-  }
+  // compute unpivoted QR of A
+  dgeqrf_( & m_A, & n_A, buff_A, & ldim_A,
+		   buff_tau, 
+		   buff_work, & lwork, & info );
 
-  t_dgemm += stop_timer(time1);
-  t_dgemm = t_dgemm / 10;
+  t_dgeqrf += stop_timer(time1);
+  t_dgeqrf = t_dgeqrf;
 
-  printf("t_dgemm = %.2e \n", t_dgemm);
-
-  //print results
-  //printf("Multiplication complete\n");
-  //print_double_matrix("C",m_A,n_B,buff_C,m_A);
+  printf("t_dgeqrf = %.2e \n", t_dgeqrf);
 
   // free matrices
-  free(buff_A);
-  free(buff_B);
-  free(buff_C);
+  free( buff_A );
+  free( buff_tau );
+  free( buff_work );
 
   printf("%% End of Program\n");
 

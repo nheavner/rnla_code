@@ -65,12 +65,15 @@ int main() {
   // do the multiplication
   time1 = start_timer();
 
+  for (i=0; i < 100; i++) {
   dgemm_gpu( t, n, n_A, n_B, m_B,
 				& d_one, buff_g_A, ldim_A,
 				buff_g_B, ldim_B,
 				& d_zero, buff_g_C, ldim_C );
+  }
 
   t_dgemm += stop_timer( time1 );
+  t_dgemm = t_dgemm / 100;
 
   // copy and print result on host memory
   cudaMemcpy( buff_C, buff_g_C, m_C * n_C * sizeof( double ), cudaMemcpyDeviceToHost );

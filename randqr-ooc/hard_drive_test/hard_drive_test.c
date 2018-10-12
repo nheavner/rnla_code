@@ -21,15 +21,18 @@ int main( int argc, char *argv[] ) {
   int i;
   size_t read_check;
 
-  struct timespec t1, t2;
+  struct timespec t1, t2, t_start, t_end;
   uint64_t diff;
   double t_read_ssd = 0.0, t_write_ssd = 0.0;
   double t_read_hdd = 0.0, t_write_hdd = 0.0;
+  double t_total = 0.0;
 
   // Create matrix A, vector p, vector s, and matrix Q.
-  m_A      = 50000;
-  n_A      = 50000;
+  m_A      = 45000;
+  n_A      = 45000;
  
+  clock_gettime( CLOCK_MONOTONIC, & t_start );
+
   A_p = ( double * ) malloc( m_A * n_A * sizeof( double ) );
 
   // Generate binary file which stores the matrix (out of core)
@@ -63,7 +66,7 @@ int main( int argc, char *argv[] ) {
 	t_read_hdd += ( double ) diff / (1E9);
 
     fseek( A_fp_hdd, 0, SEEK_SET );
-  
+
   // write to hard drives and time
 	
 	// write to ssd
@@ -101,6 +104,12 @@ int main( int argc, char *argv[] ) {
 
   // Free matrices and vectors.
   free( A_p );
+
+  clock_gettime( CLOCK_MONOTONIC, & t_end );
+  diff = (1E9) * (t_end.tv_sec - t_start.tv_sec) + t_end.tv_nsec - t_start.tv_nsec;
+  t_total += ( double ) diff / (1E9);
+
+  printf( "Total time: %le\n", t_total );
 
   printf( "%% End of Program\n" );
 

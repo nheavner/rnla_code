@@ -133,7 +133,7 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
 
 
 // ============================================================================
-int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
+int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
 		char * Q_fname,
         int nb_alg, int pp, int panel_pivoting ) {
@@ -226,7 +226,6 @@ int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
   buff_t = buff_tau;
 
   A_fp = fopen( A_fname, "r+" );
-  Q_fp = fopen( Q_fname, "q+" );
 
   // Quick return.
   if( mn_A == 0 ) {
@@ -428,7 +427,6 @@ int hqrrp_ooc( char * A_fname, int m_A, int n_A, int ldim_A,
 
   // Remove auxiliary objects.
   fclose( A_fp );
-  fclose( Q_fp );
 
   free( buff_G );
   free( buff_Y );

@@ -23,6 +23,22 @@ profile.o : profile.c
 	@$(CC) -c profile.c \
 	-DMKL_LP64 -m64 -I/opt/intel/mkl/include
 
+block_size_timing.x : block_size_timing.o NoFLA_UTV_WY_blk_var2.o
+	@$(LD)  \
+	-o block_size_timing.x \
+	block_size_timing.o \
+	NoFLA_UTV_WY_blk_var2.c \
+    -Wl,--start-group \
+    /opt/intel/mkl/lib/intel64/libmkl_intel_lp64.a \
+    /opt/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
+    /opt/intel/mkl/lib/intel64/libmkl_core.a \
+	-Wl,--end-group \
+	-ldl -lpthread -lm -lgomp
+
+block_size_timing.o : block_size_timing.c
+	@$(CC) -c block_size_timing.c \
+	-DMKL_LP64 -m64 -I/opt/intel/mkl/include
+
 timing.x : timing.o NoFLA_UTV_WY_blk_var2.o
 	@$(LD)  \
 	-o timing.x \

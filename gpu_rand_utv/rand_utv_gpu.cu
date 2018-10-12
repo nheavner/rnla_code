@@ -474,6 +474,7 @@ int rand_utv_gpu(
 
       // carry out "sampling" multiplication
 	  if ( pp > 0 && i > 0 ) {
+	    // TODO: don't need to pass in cublasH handle to any gpu_dgemm functions anymore
 		gpu_dgemm( cublasH, 
 				   t, n, d_one,
 				   m_A_loc, n_A_loc, A_loc_pg, ldim_A,
@@ -609,11 +610,16 @@ int rand_utv_gpu(
     //   [Vloc,~,~] = qr(Y(:,Jtmp(1:b)));
     // else
     //   [Vloc,~]   = LOCAL_nonpiv_QR(Y,b);
-    // end
+    // ent gpu dgemm
 
 	local_magqr_nopiv( m_Y_loc, n_Y_loc, 
 					   Y_loc_pg, ldim_Y,
 					   tau_h, magInfo ); 
+
+#ifdef PROFILE
+    tt_qr1_fact += stop_timer( time1 );
+    time1 = start_timer();
+#endif
 
 	// construct "TU'" matrix for UT representation of HH matrix
 	magma_dlarft( cublasH, m_Y_loc, n_Y_loc, 
@@ -622,10 +628,6 @@ int rand_utv_gpu(
 				  T_pg, ldim_T,
 				  TVt_pg, ldim_TVt );
 
-#ifdef PROFILE
-    tt_qr1_fact += stop_timer( time1 );
-    time1 = start_timer();
-#endif
     // Apply the pivot matrix to rotate maximal mass into the "J2" column
 	// T(:,[J2,J3]) = T(:[J2,J3])*Vloc;
 
@@ -641,12 +643,15 @@ int rand_utv_gpu(
 	time1 = start_timer();
 #endif
 
-    // Update matrix V with transformations from the first QR.
-	my_dormqr_gpu( cublasH,
-				   r,n,
-				   m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
-				   m_V_right, n_V_right, V_right_pg, ldim_V,
-				   TVt_pg, ldim_TVt );
+    if ( build_V == 1 ) {
+
+	  // Update matrix V with transformations from the first QR.
+	  my_dormqr_gpu( cublasH,
+					 r,n,
+					 m_Y_loc, n_Y_loc, Y_loc_pg, ldim_Y,
+					 m_V_right, n_V_right, V_right_pg, ldim_V,
+					 TVt_pg, ldim_TVt );
+    }
 
 	// if oversampling is done, finish SVD of sampling matrix
 	// (most work is done after QR) and update V and A accordingly
@@ -711,17 +716,17 @@ int rand_utv_gpu(
 	local_magqr_nopiv( m_A_bl, n_A_bl, 
 					   A_bl_pg, ldim_A,
 					   tau_h, magInfo );
+
+#ifdef PROFILE
+	tt_qr2_fact += stop_timer( time1 );
+	time1 = start_timer();
+#endif
 	
 	magma_dlarft( cublasH, m_A_bl, n_A_bl, 
 				  A_bl_pg, ldim_A,
 				  tau_h,
 				  T_pg, ldim_T,
 				  TVt_pg, ldim_TVt );
-	
-#ifdef PROFILE
-	tt_qr2_fact += stop_timer( time1 );
-	time1 = start_timer();
-#endif
 
 	// update rest of matrix A with transformations from the second QR
 	my_dormqr_gpu( cublasH,
@@ -735,12 +740,15 @@ int rand_utv_gpu(
 	time1 = start_timer();
 #endif
 
-	// update matrix U with transformations from the second QR
-	my_dormqr_gpu( cublasH,
-				   r, n,
-				   m_A_bl, n_A_bl, A_bl_pg, ldim_A,
-				   m_U_right, n_U_right, U_right_pg, ldim_U,
-				   TVt_pg, ldim_TVt );
+    if ( build_U == 1 ) {
+
+	  // update matrix U with transformations from the second QR
+	  my_dormqr_gpu( cublasH,
+					 r, n,
+					 m_A_bl, n_A_bl, A_bl_pg, ldim_A,
+					 m_U_right, n_U_right, U_right_pg, ldim_U,
+					 TVt_pg, ldim_TVt );
+    }
 
 #ifdef PROFILE
 	tt_qr2_updt_u += stop_timer( time1 );
@@ -801,28 +809,35 @@ int rand_utv_gpu(
 	tt_svd_updt_a += stop_timer( time1 );
 	time1 = start_timer();
 #endif
-    
-	// update U
-	gpu_dgemm( cublasH,
-			   n, n, d_one,
-			   m_U_mid, n_U_mid, U_mid_pg, ldim_U,
-			   m_U_svd, n_U_svd, U_svd_pg, ldim_U_svd,
-			   d_zero,
-			   m_U_mid, n_U_mid, Tmp_pg, m_U_mid );	
+   
+    if ( build_U == 1 ) {
 
-	// copy from temporary buffer to U
-	magma_dcopymatrix( m_U_mid, n_U_mid, Tmp_pg, m_U_mid, U_mid_pg, ldim_U );
+	  // update U
+	  gpu_dgemm( cublasH,
+				 n, n, d_one,
+				 m_U_mid, n_U_mid, U_mid_pg, ldim_U,
+				 m_U_svd, n_U_svd, U_svd_pg, ldim_U_svd,
+				 d_zero,
+				 m_U_mid, n_U_mid, Tmp_pg, m_U_mid );	
 
-	// update V
-	gpu_dgemm( cublasH,
-			   n, t, d_one,
-			   m_V_mid, n_V_mid, V_mid_pg, ldim_V,
-			   m_Vt_svd, n_Vt_svd, Vt_svd_pg, ldim_Vt_svd,
-			   d_zero,
-			   m_V_mid, n_V_mid, Tmp_pg, m_V_mid );
-	
-	// copy from temporary buffer to V
-	magma_dcopymatrix( m_V_mid, n_V_mid, Tmp_pg, m_V_mid, V_mid_pg, ldim_V );
+	  // copy from temporary buffer to U
+	  magma_dcopymatrix( m_U_mid, n_U_mid, Tmp_pg, m_U_mid, U_mid_pg, ldim_U );
+
+	}
+
+    if ( build_V == 1 ) {
+	  // update V
+	  gpu_dgemm( cublasH,
+				 n, t, d_one,
+				 m_V_mid, n_V_mid, V_mid_pg, ldim_V,
+				 m_Vt_svd, n_Vt_svd, Vt_svd_pg, ldim_Vt_svd,
+				 d_zero,
+				 m_V_mid, n_V_mid, Tmp_pg, m_V_mid );
+	  
+	  // copy from temporary buffer to V
+	  magma_dcopymatrix( m_V_mid, n_V_mid, Tmp_pg, m_V_mid, V_mid_pg, ldim_V );
+
+    }
 
 #ifdef PROFILE
 	tt_svd_updt_uv += stop_timer( time1 );
@@ -882,10 +897,16 @@ int rand_utv_gpu(
 #ifdef PROFILE
   #ifdef PROFILE_FOR_GRAPHING
   printf("n = %d \n", n_A );
-  printf("%le %le %le %le \n", tt_spl, 
-							   tt_qr1_fact,//+tt_qr1_updt_a+tt_qr1_updt_v, 
-							   tt_qr2_fact,//+tt_qr2_updt_a+tt_qr2_updt_u, 
-							   tt_svd_fact);//+tt_svd_updt_a+tt_svd_updt_uv);
+  printf("%le %le %le %le %le %le %le \n", tt_spl, 
+							   tt_qr1_fact, 
+							   tt_qr1_updt_a,
+							   tt_qr2_fact, 
+							   tt_qr2_updt_a,
+							   tt_svd_fact,
+							   tt_spl + 
+							   tt_qr1_fact + tt_qr1_updt_a + tt_qr1_updt_v + 
+							   tt_qr2_fact + tt_qr2_updt_a + tt_qr2_updt_u +
+							   tt_svd_fact + tt_svd_updt_a + tt_svd_updt_uv );
   #else
   printf( "%% tt_build_y:	%le \n", tt_spl );
   printf( "%% tt_qr1:	%le \n", tt_qr1_fact + tt_qr1_updt_a + 
@@ -1508,24 +1529,21 @@ static void gpu_dgemm( cublasHandle_t handle,
 
   // generate the correct transpose option identifier that CUBLAS accepts
   // also determine the correct "middle" dim of the mult
-  cublasOperation_t cutransA, cutransB;
-  cublasStatus_t cublasStat = CUBLAS_STATUS_SUCCESS;
+  magma_trans_t magtransA, magtransB;
+
   int middle_dim;
 
-  if ( opA == 'N' ) { cutransA = CUBLAS_OP_N; middle_dim = n_A; }
-  else if ( opA == 'T' ) { cutransA = CUBLAS_OP_T; middle_dim = m_A; }
+  if ( opA == 'N' ) { magtransA = MagmaNoTrans; middle_dim = n_A; }
+  else if ( opA == 'T' ) { magtransA = MagmaTrans; middle_dim = m_A; }
 
-  if ( opB == 'N' ) { cutransB = CUBLAS_OP_N; }
-  else if ( opB == 'T' ) { cutransB = CUBLAS_OP_T; }
+  if ( opB == 'N' ) { magtransB = MagmaNoTrans; }
+  else if ( opB == 'T' ) { magtransB = MagmaTrans; }
 
 
   // do the multiplication
-  cublasStat = cublasDgemm( handle, cutransA, cutransB,
-				m_C, n_C, middle_dim, & alpha,
-				A_pg, ldim_A, B_pg, ldim_B, 
-				& beta, C_pg, ldim_C );
-	
-  assert( cublasStat == CUBLAS_STATUS_SUCCESS );
+  magma_dgemm( magtransA, magtransB, m_C, n_C, middle_dim, alpha,
+			  A_pg, ldim_A, B_pg, ldim_B, beta,
+			  C_pg, ldim_C ); 
 }
 
 // =======================================================================

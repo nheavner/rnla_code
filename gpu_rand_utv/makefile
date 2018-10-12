@@ -74,6 +74,21 @@ profile_rutv_gpu.o : profile_rutv_gpu.cu
 	@$(CC) $(GENCODE_FLAGS) -c profile_rutv_gpu.cu \
 	-I/opt/intel/mkl/include \
 
+block_size_timing.x : block_size_timing.o rand_utv_gpu.o
+	@$(LD) $(GENCODE_FLAGS) \
+	-o block_size_timing.x \
+	block_size_timing.o \
+	rand_utv_gpu.o \
+	-L/usr/local/cuda/lib64 \
+	-L/usr/local/magma/lib \
+	-lmagma -lcudart -lcusolver -lcublas -lgomp -lcurand \
+	-L/opt/intel/mkl/lib/intel64 \
+	-lmkl_intel_lp64 -lmkl_core -ldl -lpthread -lgomp -lcublas_device 
+
+block_size_timing.o : block_size_timing.cu
+	@$(CC) $(GENCODE_FLAGS) -c block_size_timing.cu \
+	-I/opt/intel/mkl/include \
+
 clean : FORCE
 	rm -f a.out *.o *~ core
 

@@ -20,25 +20,24 @@ static void print_double_matrix( char * name, int m_A, int n_A,
 // ============================================================================
 int main( int argc, char *argv[] ) {
   
-  MKL_INT     nb_alg, pp, m_A, n_A, mn_A, ldim_A, ldim_U, ldim_V;
+  MKL_INT     nb_alg, pp, m_A, mn_A, ldim_A, ldim_U, ldim_V;
   double  * buff_A, * buff_U, * buff_V;
   char all = 'A', t = 'T', n = 'N', f  = 'F';
   double d_one = 1.0, d_zero = 0.0, d_neg_one = -1.0;
   int i;
 
-  int q = 2;
-  int bl_size = 256;
-  int n_arr[] = {2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000, 15000, 18000};
+  int q = 0;
+  int bl_size_arr[] = {64, 128, 256, 512};
+  int n_A = 10000;
 
   double t_proc;
   struct timespec ts_start, ts_end;
   
-  for ( i=0; i < ( sizeof(n_arr) / sizeof(int) ); i++ ) {
-    printf( "%% n = %i: \n", n_arr[ i ] );
+  for ( i=0; i < ( sizeof(bl_size_arr) / sizeof(int) ); i++ ) {
+    printf( "%% block_size = %i: \n", bl_size_arr[ i ] );
 	
 	// Create matrix A, matrix U, and matrix V.
-    m_A      = n_arr[ i ];
-    n_A      = n_arr[ i ];
+    m_A      = n_A;
     mn_A     = min( m_A, n_A );
 
     buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
@@ -61,7 +60,7 @@ int main( int argc, char *argv[] ) {
 	NoFLA_UTV_WY_blk_var2( m_A, n_A, buff_A, ldim_A, 
         0, m_A, m_A, buff_U, ldim_U, 
         0, n_A, n_A, buff_V, ldim_V, 
-        bl_size, 0, q );
+        bl_size_arr[ i ], 0, q );
 
     // Free matrices and vectors.
     free( buff_A );

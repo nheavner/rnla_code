@@ -2,7 +2,7 @@ clear
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% read in data %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 addpath ./bl_size_test_data
-bl_test_times_n_25k
+bl_test_times_n_15k
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% plot %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 figure(1);
@@ -12,3 +12,4 @@ set(ax,'fontsize',16);
 set(p1,'LineWidth',2,'MarkerSize',10);
 xlabel('n');
 ylabel('Time [s]');
+title('block size test, b = 15000')
