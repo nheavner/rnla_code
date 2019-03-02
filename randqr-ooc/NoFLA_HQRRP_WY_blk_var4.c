@@ -397,6 +397,7 @@ int NoFLA_HQRRP_WY_blk_var4( int m_A, int n_A, double * buff_A, int ldim_A,
           m_G, b, buff_G1, ldim_G,
           m_G, max( 0, n_G - j - b ), buff_G2, ldim_G );
     }
+
   }
 
   // Remove auxiliary objects.

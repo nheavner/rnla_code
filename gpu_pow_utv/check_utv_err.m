@@ -12,10 +12,12 @@ ss = svd(A);
 
 [U2,T2,V2] = qr(A);         % Built-in LAPACK.
 
+b = 50;
+p = 0;
 [U3,T3,V3] = randUTV_econ(A,b,p,q);        % randomized UTV
 
 %%% Perform the most basic error checks:
-fprintf(1,'                     gpu randUTV  matlab CPQR    matlab randUTV\n')
+fprintf(1,'                     gpu powerURV  matlab CPQR    matlab randUTV\n')
 fprintf(1,'||A*V - U*T|| (fro) = %12.5e    %12.5e    %12.5e\n',...
         norm(A*V1 - U1*T1,'fro'),...
         norm(A*V2 - U2*T2,'fro'),...
@@ -161,11 +163,12 @@ for j = 1:(nstep-1)
    end
    
    %%% If over-sampling is done, then reduce Y to b columns.  
-   [Utmp,~,~] = svd(Y,'econ');
-   Y = Utmp(:,1:b);
-   Ytmp = Utmp(:,(b+1):end);
+   if (p > 0)
+       [Utmp,~,~] = svd(Y,'econ');
+       Y = Utmp(:,1:b);
+       Ytmp = Utmp(:,(b+1):end);
+   end
 
-   
    %%% Perform b steps of Householder QR on the Y matrix,
    %%% and then apply the Householder reflections "from the right".
    [~,Vloc_U,Vloc_TU] = LOCAL_dgeqrf_modified(Y);

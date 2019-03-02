@@ -19,7 +19,8 @@ magma_qr_timing.x : magma_qr_timing.o
 
 magma_qr_timing.o : magma_qr_timing.cu
 	@$(CC) $(GENCODE_FLAGS) $(DEBUG_FLAGS) -c magma_qr_timing.cu \
-	-I/opt/intel/mkl/include -I/usr/local/magma/include -dc -DADD_ -DMKL_ILP64 
+	-I/opt/intel/mkl/include -I/usr/local/magma/include -dc -DADD_ \
+	-DMAGMA_WITH_MKL
 
 clean : FORCE
 	rm -f a.out *.o *~ core

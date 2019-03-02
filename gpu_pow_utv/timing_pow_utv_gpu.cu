@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "rand_utv_gpu.h"
+#include "pow_utv_gpu.h"
 #include <mkl.h>
 
 #include <time.h>
@@ -29,13 +29,13 @@ int main() {
 
   int bl_size = 128;
   int n_A[] = {2000,3000,4000,5000,6000,8000,10000,12000,15000};
-  int q[] = {0,1,2,3,4};
+  int q[] = {1,2};
   int p = 0;
 
   // for timing
   timespec t1, t2;
   uint64_t diff;
-  double   t_rutv_gpu[ (sizeof( n_A ) / sizeof( int ))*(sizeof(q)/sizeof(int)) ];
+  double   t_pow_gpu[ (sizeof( n_A ) / sizeof( int ))*(sizeof(q)/sizeof(int)) ];
 
   // for output file
   FILE * ofp;
@@ -66,16 +66,16 @@ int main() {
 		  clock_gettime(CLOCK_MONOTONIC, & t1 );
 		  
 		  // do factorization
-		  rand_utv_gpu( n_A[i], n_A[i], buff_A, ldim_A,
+		  pow_utv_gpu( n_A[i], n_A[i], buff_A, ldim_A,
 						1, n_A[i], n_A[i], buff_U, n_A[i],
 						1, n_A[i], n_A[i], buff_V, n_A[i],
-						bl_size, p, q[j] );
+						q[j] );
 		  
 		  // stop timing and record time
 		  cudaDeviceSynchronize();
 		  clock_gettime( CLOCK_MONOTONIC, & t2 );
 		  diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
-		  t_rutv_gpu[ i + j*(sizeof(n_A)/sizeof(int)) ] = ( double ) diff / (1E9);
+		  t_pow_gpu[ i + j*(sizeof(n_A)/sizeof(int)) ] = ( double ) diff / (1E9);
 
 	  // Free matrices and vectors.
 	  free( buff_A );
@@ -87,11 +87,9 @@ int main() {
   }
 
   // write results to file
-  ofp = fopen( "times_rutv_gpu.m", & mode );
+  ofp = fopen( "times_powurv_gpu.m", & mode );
 
-	fprintf( ofp, "%% block size was %d \n \n", bl_size );
-
-	fprintf( ofp, "%% the ROWS of the matrix t_rutv_gpu correspond to the values of q in ascending order (i.e. 1st row is q=0) \n \n " );
+	fprintf( ofp, "%% the ROWS of the matrix t_rutv_gpu correspond to the values of q in ascending order (i.e. 1st row is q=1) \n \n " );
 
 	// write out vector of values of n used for these tests
 	fprintf( ofp, "n_rutv_gpu = [ \n" );
@@ -107,7 +105,7 @@ int main() {
 	fprintf( ofp, "t_rutv_gpu = [ \n" );
 
 	for ( i=0; i < (sizeof(n_A) * sizeof(q)) / (sizeof(int) * sizeof(int)); i++ ) {
-	  fprintf( ofp,  "%.2e ", t_rutv_gpu[ i ] );
+	  fprintf( ofp,  "%.2e ", t_pow_gpu[ i ] );
 
 	  if ( (i+1) % (sizeof(n_A)/sizeof(int)) == 0 ) 
 	    fprintf( ofp, "; \n" );

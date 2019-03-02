@@ -247,7 +247,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   int     i_one = 1;
   FILE    * A_fp;
   size_t err_check;
-  int num_cols_read = 5000;
+  int num_cols_read = 5000; // TODO: make this value smarter
 
 #ifdef PROFILE
  struct timespec time1;
@@ -428,7 +428,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
 	  // read out block of matrix [ A12; A22; A32 ], applying the permutation as we read
 	  for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
 		
-		fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
+		fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
 		err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ], 
 						   sizeof( double ), m_A_mid, A_fp );			   
 		if ( err_check != m_A_mid ) {

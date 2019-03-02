@@ -2,14 +2,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "rand_utv_gpu.h"
+#include "pow_utv_gpu.h"
 #include <mkl.h>
 
 #define max( a, b ) ( (a) > (b) ? (a) : (b) )
 #define min( a, b ) ( (a) < (b) ? (a) : (b) )
 
 //#define PRINT_DATA
-//#define CHECK_ERROR
+#define CHECK_ERROR
 
 // ============================================================================
 // Declaration of local prototypes.
@@ -24,8 +24,8 @@ static void print_double_matrix( char * name, int m_A, int n_A,
 
 // ============================================================================
 int main() {
-  int     bl_size, pp, q_iter, 
-		  m_A, n_A, ldim_A, 
+  int     q_iter, 
+		  n_A, ldim_A, 
 		  ldim_U, ldim_V;
   double  * buff_A, * buff_U, * buff_V;
  
@@ -56,69 +56,65 @@ int main() {
 
 
   // Create matrix A, matrix U, and matrix V.
-  m_A      = 5000;
-  n_A      = 5000;
-  bl_size =  128;
-  q_iter = 2;
-  pp = 128;
+  n_A      = 1000;
+  q_iter = 1;
 
-  buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
-  ldim_A   = max( 1, m_A );
+  buff_A   = ( double * ) malloc( n_A * n_A * sizeof( double ) );
+  ldim_A   = max( 1, n_A );
 
-  buff_U   = ( double * ) malloc( m_A * m_A * sizeof( double ) );
-  ldim_U   = max( 1, m_A );
+  buff_U   = ( double * ) malloc( n_A * n_A * sizeof( double ) );
+  ldim_U   = max( 1, n_A );
 
   buff_V   = ( double * ) malloc( n_A * n_A * sizeof( double ) );
   ldim_V   = max( 1, n_A );
 
 #ifdef CHECK_ERROR
-  buff_Ac  = ( double * ) malloc( m_A * n_A * sizeof( double ) );
-  buff_Acc = ( double * ) malloc( m_A * n_A * sizeof( double ) );
-  buff_UT  = ( double * ) malloc( m_A * n_A * sizeof( double ) );
+  buff_Ac  = ( double * ) malloc( n_A * n_A * sizeof( double ) );
+  buff_Acc = ( double * ) malloc( n_A * n_A * sizeof( double ) );
+  buff_UT  = ( double * ) malloc( n_A * n_A * sizeof( double ) );
 
-  buff_ss  = ( double * ) malloc( min( m_A, n_A ) * sizeof( double ) );
+  buff_ss  = ( double * ) malloc( n_A * sizeof( double ) );
 
   // allocate memory for work arrays
-  lwork = 3 * min( m_A, n_A ) + max( max( m_A, n_A ), 7 * min( m_A, n_A ) );
+  lwork = 3 * n_A + 7 * n_A; 
 
   buff_work = ( double * ) malloc( lwork * sizeof( double ) );
-  buff_iwork = ( int * ) malloc( 8 * min( m_A, n_A ) * sizeof( int ) );
+  buff_iwork = ( int * ) malloc( 8 * n_A * sizeof( int ) );
 #endif
 
   // Generate matrix.
-  matrix_generate( m_A, n_A, buff_A, ldim_A );
+  matrix_generate( n_A, n_A, buff_A, ldim_A );
 
 #ifdef CHECK_ERROR
   // copy data to later check error
-  for ( i=0; i < m_A * n_A; i++ ) {
+  for ( i=0; i < n_A * n_A; i++ ) {
     buff_Ac[ i ] = buff_A[ i ];
   }
   
-  for ( i=0; i < m_A * n_A; i++ ) {
+  for ( i=0; i < n_A * n_A; i++ ) {
     buff_Acc[ i ] = buff_A[ i ];
   }
 #endif
 
 #ifdef PRINT_DATA
-  printf("b = %d; p = %d; q = %d; \n", bl_size, pp, q_iter );
-  print_double_matrix( A_name_pt, m_A, n_A, buff_A, ldim_A );
+  printf("q = %d; \n", q_iter );
+  print_double_matrix( A_name_pt, n_A, n_A, buff_A, ldim_A );
 #endif
 
   // Factorize matrix.
   printf( "%% Just before computing factorization.\n" );
 
-  rand_utv_gpu( m_A, n_A, buff_A, ldim_A, 
-      1, m_A, m_A, buff_U, ldim_U, 
+  pow_utv_gpu( n_A, n_A, buff_A, ldim_A, 
+      1, n_A, n_A, buff_U, ldim_U, 
       1, n_A, n_A, buff_V, ldim_V, 
-      bl_size, pp, q_iter );
-      //// 64, 10, 2 );
+      q_iter );
 
   printf( "%% Just after computing factorization.\n" );
 
   // Print results.
 #ifdef PRINT_DATA
-  print_double_matrix( T_name_pt, m_A, n_A, buff_A, ldim_A );
-  print_double_matrix( U_name_pt, m_A, m_A, buff_U, ldim_U );
+  print_double_matrix( T_name_pt, n_A, n_A, buff_A, ldim_A );
+  print_double_matrix( U_name_pt, n_A, n_A, buff_U, ldim_U );
   print_double_matrix( V_name_pt, n_A, n_A, buff_V, ldim_V );
 #endif
 
@@ -127,24 +123,24 @@ int main() {
 #ifdef CHECK_ERROR
 
   // compute || A ||
-  norm_A = dlange(  & f,  & m_A,  & n_A, 
-				buff_Ac,  & m_A, NULL );
+  norm_A = dlange(  & f,  & n_A,  & n_A, 
+				buff_Ac,  & n_A, NULL );
 
   // compute U * T
-  dgemm( & n, & n, & m_A, & n_A, & m_A,
-		& d_one, buff_U, & m_A,
+  dgemm( & n, & n, & n_A, & n_A, & n_A,
+		& d_one, buff_U, & n_A,
 		buff_A, & ldim_A,
-		& d_zero, buff_UT, & m_A );
+		& d_zero, buff_UT, & n_A );
 
-  // compute A - (U * T) * V', store in buff_Acp
-  dgemm( & n, & t, & m_A, & n_A, & n_A,
-		& d_one, buff_UT, & m_A,
+  // compute (U * T) * V' - A, store in buff_Ac
+  dgemm( & n, & t, & n_A, & n_A, & n_A,
+		& d_one, buff_UT, & n_A,
 		buff_V, & n_A,
-		& d_neg_one, buff_Ac, & m_A );
+		& d_neg_one, buff_Ac, & n_A );
 
   // compute || A - U * T * V'  ||
-  err = dlange(  & f,  & m_A,  & n_A, 
-				buff_Ac,  & m_A, NULL );
+  err = dlange(  & f,  & n_A,  & n_A, 
+				buff_Ac,  & n_A, NULL );
 
   printf("err = %.2e \n", err);
 
@@ -154,26 +150,26 @@ int main() {
 
     // compute singular values of A
 	dgesdd( & n, 
-			& m_A, & n_A, buff_Acc, & ldim_A,
+			& n_A, & n_A, buff_Acc, & ldim_A,
 		    buff_ss,
-			NULL, & m_A,
+			NULL, & n_A,
 			NULL, & n_A,
 			buff_work, & lwork, buff_iwork, & info );
 
     // compute SIGMA - T
-    for ( i=0; i < min( m_A, n_A ); i++ ) {
+    for ( i=0; i < n_A; i++ ) {
 	  buff_A[ i + i * ldim_A ] = buff_A[ i + i * ldim_A ] - buff_ss[ i ];  
 	}
 
 	// compute || SIGMA - T ||
-	err = dlange( & f, & m_A, & n_A,
-			buff_A, & m_A, NULL );
+	err = dlange( & f, & n_A, & n_A,
+			buff_A, & n_A, NULL );
 	
   printf( "%% || D - T ||_F / || A ||_F = %e \n", err / norm_A );
 
   // compute the error in the singular value estimates vs the singular values
   err = 0.0;
-  for ( i=0; i < min( m_A, n_A ); i++ ) {
+  for ( i=0; i < n_A; i++ ) {
     err += buff_A[ i + i * ldim_A ] * buff_A[ i + i * ldim_A ]; 
   }
   err = sqrt( err );
@@ -227,7 +223,7 @@ static void print_double_matrix( char * name, int m_A, int n_A,
     for( j = 0; j < n_A; j++ ) {
       printf( "%.16e ", buff_A[ i + j * ldim_A ] );
     }
-    printf( "\n" );
+    printf( ";\n" );
   }
   printf( "];\n" );
 }

@@ -24,7 +24,7 @@ int main( int argc, char *argv[] ) {
 
   // Create matrix A, matrix U, and matrix V.
   m_A      = 10000;
-  n_A      = 128;
+  n_A      = 10000;
   mn_A     = min( m_A, n_A );
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
@@ -51,7 +51,7 @@ int main( int argc, char *argv[] ) {
   NoFLA_UTV_WY_blk_var2( m_A, n_A, buff_A, ldim_A, 
       1, m_A, m_A, buff_U, ldim_U, 
       1, n_A, n_A, buff_V, ldim_V, 
-      128, 0, 2 );
+      256, 0, 0 );
       //// 64, 10, 2 );
   printf( "%% Just after computing factorization.\n" );
 

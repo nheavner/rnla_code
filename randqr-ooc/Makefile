@@ -19,7 +19,7 @@ simple_test.x : simple_test.o hqrrp_ooc.o NoFLA_HQRRP_WY_blk_var4.o
 			/opt/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
 			/opt/intel/mkl/lib/intel64/libmkl_core.a \
 			-Wl,--end-group \
-			-ldl -lpthread -lm -lgomp
+			-ldl -lpthread -lm -lgomp -fopenmp
 
 timing.x : timing.o hqrrp_ooc.o NoFLA_HQRRP_WY_blk_var4.o
 	@$(LD) $(LDFLAGS) \
@@ -32,7 +32,7 @@ timing.x : timing.o hqrrp_ooc.o NoFLA_HQRRP_WY_blk_var4.o
 			/opt/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
 			/opt/intel/mkl/lib/intel64/libmkl_core.a \
 			-Wl,--end-group \
-			-ldl -lpthread -lm -lgomp
+			-ldl -lpthread -lm -lgomp -fopenmp
 
 block-size-test.x : block-size-test.o hqrrp_ooc.o NoFLA_HQRRP_WY_blk_var4.o
 	@$(LD) $(LDFLAGS) \
@@ -45,7 +45,7 @@ block-size-test.x : block-size-test.o hqrrp_ooc.o NoFLA_HQRRP_WY_blk_var4.o
 			/opt/intel/mkl/lib/intel64/libmkl_gnu_thread.a \
 			/opt/intel/mkl/lib/intel64/libmkl_core.a \
 			-Wl,--end-group \
-			-ldl -lpthread -lm -lgomp
+			-ldl -lpthread -lm -lgomp -fopenmp
 
 simple_test.o : simple_test.c
 	@$(CC) $(CCFLAGS) -c simple_test.c \

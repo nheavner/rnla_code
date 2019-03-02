@@ -10,8 +10,6 @@ gcc -o dgeqrf_test.x dgeqrf_test.o -Wl,--start-group /opt/intel/mkl/intel64/libm
 #include<stdint.h>
 #include <time.h>
 
-#include <mkl.h>
-
 #define l_max( a, b ) ( (a) >  (b) ? (a) : (b) )
 #define l_min( a, b ) ( (a) < (b) ? (a) : (b) )
 

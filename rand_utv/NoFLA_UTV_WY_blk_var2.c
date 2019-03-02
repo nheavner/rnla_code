@@ -56,7 +56,7 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 // Compilation declarations.
 
 #define PROFILE
-#define PROFILE_FOR_GRAPH
+//#define PROFILE_FOR_GRAPH
 
 // ============================================================================
 // Declaration of local prototypes.

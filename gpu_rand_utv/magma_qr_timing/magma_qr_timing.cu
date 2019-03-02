@@ -18,7 +18,7 @@ nvcc -o qr_fact_test.x qr_fact_test.o -L/usr/local/magma/lib -lmagma -lcusolver 
 #include <cusolverDn.h>
 
 #include <magma.h>
-#include <magma_lapack.h>
+#include <mkl.h>
 
 #define min( a,b ) ( (a) > (b) ? (b) : (a) )
 
@@ -57,7 +57,7 @@ void print_double_matrix( const char * name, int m_A, int n_A,
 int main() {
 
   // declare, initialize variables
-  int n_A_arr[] = {10000};//{2000, 3000,4000,5000,6000,8000,10000,12000,15000,18000};
+  int n_A_arr[] = {30000};//{2000, 3000,4000,5000,6000,8000,10000,12000,15000,18000};
 
   int m_A, n_A, ldim_A;
   double * A_pc, * A_pg;
@@ -66,17 +66,14 @@ int main() {
 						  // vector stored in the lower portion of A after
 						  // factorization
   timespec time1;
-  double t_dgeqrf = 0.0;
+  double t_dgeqrf_gpu = 0.0, t_dgeqrf_cpu = 0.0;
   int i, j;
   magma_int_t * magInfo = (magma_int_t * ) malloc( sizeof( magma_int_t ) );
   *magInfo = 0;
   double * work_pg;
-  magma_int_t lwork;
-  int nb;
-  double * work_pc, * get_work_pc;
+  double * T_d;
+  magma_int_t lwork_d;
   magma_int_t * jpvt_pc;
-
-  get_work_pc = ( double * ) malloc( sizeof( double ) );
 
   magma_init();
 
@@ -86,8 +83,6 @@ int main() {
   
     m_A = n_A_arr[ i ]; n_A = n_A_arr[ i ]; ldim_A = n_A_arr[ i ];
 
-	t_dgeqrf = 0.0;
-
 	// allocate array on host (cpu)
 	magma_dmalloc_pinned( & A_pc, m_A * n_A );
 
@@ -96,6 +91,13 @@ int main() {
 
 	// allocate tau array
 	magma_dmalloc_cpu( & tau_h, n_A );
+  
+    // allocate T_d array
+	int nb, T_len;
+	nb = magma_get_dgeqrf_nb( m_A, n_A );
+	T_len = ( 2 * min( m_A, n_A ) + ceil( n_A / 32.0 ) * 32 ) * nb;
+	cudaMalloc( ( void ** ) & T_d, 
+				T_len * sizeof( double ) );
 
 	// allocate pivot tracking array;
 	jpvt_pc = ( magma_int_t * ) malloc(n_A * sizeof( magma_int_t ) );
@@ -109,42 +111,49 @@ int main() {
     // copy matrix from cpu to gpu
 	cudaMemcpy( A_pg, A_pc, m_A * n_A * sizeof( double ), cudaMemcpyHostToDevice );
 
-    // allocate work array
+    // allocate gpu work array
 	nb = magma_get_dgeqp3_nb( m_A, n_A );
-	lwork = 2 * n_A + ( n_A+1 ) * nb;
-	lwork = max( ( int ) lwork, m_A * n_A + n_A );
-	magma_dmalloc_pinned( & work_pc, lwork );
-	cudaMalloc( & work_pg, lwork * sizeof( double ) );
+	lwork_d = 2 * n_A + ( n_A+1 ) * nb;
+	lwork_d = max( ( int ) lwork_d, m_A * n_A + n_A );
+	cudaMalloc( & work_pg, lwork_d * sizeof( double ) );
 
-	// compute QR factorization
+	// compute GPU QR factorization
 	cudaDeviceSynchronize();
 	time1 = start_timer();
 
-    //magma_dgeqrf2_gpu( m_A, n_A, A_pg, ldim_A, tau_h, magInfo );
-	//magma_dgeqp3( m_A, n_A, A_pc, ldim_A, jpvt_pc, tau_h, work_pc, lwork, magInfo );
-	magma_dgeqp3_gpu( m_A, n_A, A_pg, ldim_A, jpvt_pc, tau_h, work_pg, lwork, magInfo );
+    magma_dgeqrf3_gpu( m_A, 1000, A_pg, ldim_A, tau_h, T_d, magInfo );
+	//magma_dgeqp3_gpu( m_A, n_A, A_pg, ldim_A, jpvt_pc, tau_h, work_pg, lwork_d, magInfo );
 
 	printf("magInfo = %d \n", ( int ) * magInfo);
 
 	cudaDeviceSynchronize();
-	t_dgeqrf += stop_timer( time1 );
+	t_dgeqrf_gpu = stop_timer( time1 );
 
-    printf("%le \n", t_dgeqrf);
+	// compute CPU QR factorization
+	time1 = start_timer();
+
+	LAPACKE_dgeqrf( 102, m_A, 1000, A_pc, ldim_A,
+			 tau_h );
+
+	t_dgeqrf_cpu = stop_timer( time1 );
+
+    // print out results
+    printf("t_dgeqrf_gpu = %le, t_dgeqrf_cpu = %le, accel_dgeqrf = %le \n", 
+			t_dgeqrf_gpu, t_dgeqrf_cpu, t_dgeqrf_cpu / t_dgeqrf_gpu );
 
 	// free memory
 	magma_free_pinned( A_pc );
 	cudaFree( A_pg );
 	cudaFree( work_pg );
-	magma_free_pinned( work_pc );
 	free( jpvt_pc );
 	magma_free_cpu( tau_h );
+	cudaFree( T_d );
 
   }
 
   printf("\n");
 
   free( magInfo );
-  free( get_work_pc );
 
   magma_finalize();
 

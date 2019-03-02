@@ -48,7 +48,7 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <math.h>
 #include <time.h>
 
-#include "hqrrp_ooc.h"
+#include "hqrrp_ooc_left.h"
 #include <mkl.h>
 
 // Matrices with dimensions smaller than THRESHOLD_FOR_DGEQPF are processed 
@@ -88,6 +88,16 @@ static int Mult_BA_A_out( int m, int n, int k,
 				int bl_size,
 				double * t_read, double * t_write, double * t_seek );
 
+static int dlarft_fc( int n, int k, double * buff_V, int ldim_V,
+					  double * buff_tau,
+					  double * buff_T, int ldim_T );
+
+static int dlarfb_ltfc( int m_A, int n_A, int k,
+						double * buff_V, int ldim_V,
+						double * buff_T, int ldim_T,
+						double * buff_A, int ldim_A,
+						double * buff_work, int ldim_work );
+
 static int Downdate_Y( 
                int m_U11, int n_U11, double * buff_U11, int ldim_U11,
                int m_U21, int n_U21, double * buff_U21, int ldim_U21,
@@ -110,7 +120,7 @@ static int NoFLA_Apply_Q_WY_rnfc_blk_var4(
 static int QRP_WY( int pivoting, int num_stages, 
                int m_A, int n_A, double * buff_A, int ldim_A,
                int * buff_p, double * buff_t, 
-               int pivot_B, int m_B, double * buff_B, int ldim_B,
+               int pivot_B, int m_B, int * buff_B, int ldim_B,
                int pivot_C, int m_C, double * buff_C, int ldim_C,
                int build_T, double * buff_T, int ldim_T );
 
@@ -126,17 +136,40 @@ static int NoFLA_QRP_downdate_partial_norms( int m_A, int n_A,
 
 static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
                int m_G, double * buff_G, int ldim_G, 
-               int pivot_B, int m_B, double * buff_B, int ldim_B, 
+               int pivot_B, int m_B, int * buff_B, int ldim_B, 
                int pivot_C, int m_C, double * buff_C, int ldim_C, 
                int * buff_p,
                double * buff_d, double * buff_e );
 
-
+// ============================================================================
+// TODO: temporary function for debugging
+void print_double_matrix( char * name, int m_A, int n_A, 
+                 double * buff_A, int ldim_A ) {
+   int  i, j;
+ 
+   printf( "%s = [\n", name );
+   for( i = 0; i < m_A; i++ ) {
+     for( j = 0; j < n_A; j++ ) {
+       printf( "%.16e ", buff_A[ i + j * ldim_A ] );
+     }
+     printf( ";\n" );
+   }
+   printf( "];\n" );
+}
+static void print_int_vector( char * name, int n_v, int * buff_v ) {
+   int  i, j;
+ 
+   printf( "%s = [\n", name );
+   for( i = 0; i < n_v; i++ ) {
+     printf( "%d\n", buff_v[ i ] );
+   }
+   printf( "];\n" );
+ }
 // ============================================================================
 int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-		char * Q_fname,
-        int nb_alg, int pp, int panel_pivoting ) {
+        int nb_alg, int pp,
+		int panel_pivoting, int num_cols_read ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
 // This routine is almost compatible with LAPACK's dgeqp3.
@@ -166,6 +199,9 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 // panel_pivoting: If panel_pivoting==1, QR with pivoting is applied to 
 //                 factorize the panels of matrix A. Otherwise, QR without 
 //                 pivoting is used. Usual value for panel_pivoting is 1.
+// num_cols_read:  the number of columns of A to read into RAM at once;
+//				   the larger the value, the faster the code will run,
+//				   but the max value is determined by system memory
 //
   int     m_Y, n_Y, ldim_Y,   
           m_W, n_W, ldim_W,		 
@@ -173,7 +209,12 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 		  m_A1121, n_A1121, ldim_A1121,
 		  m_work, n_work, ldim_work,
 		  m_A21, n_A21, ldim_A21,
-		  n_Ycl,
+		  m_A_cols, n_A_cols, ldim_A_cols, // for the "blocks of cols" that we read
+		  m_A_mid, n_A_mid, n_A_mid_l, ldim_A_mid,
+		  n_A_cols_l,					   // out a bunch
+		  m_Q, n_Q, ldim_Q, n_Q_l,
+		  m_T, n_T, ldim_T,
+		  n_Y_l,
 		  m_A1121l, n_A1121l;
   
   double  * buff_Y, * buff_Yl,  // the sampling matrix Y 
@@ -184,17 +225,25 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
           * buff_t, * buff_tl,  // tau vector for HH matrices 
           * buff_G, * buff_G1, * buff_G2, // random matrix G
 		  * buff_A1121, * buff_A1121l,	  // A1121 = [ A11; A12 ]
-		  * buff_work,			// for holding chunks of cols of A for applying updates
+		  * buff_A_cols,		// for the "blocks of cols" that we read out a bunch
+		  * buff_A_mid,         //  
+		  * buff_work,			// for use in lapack functions 
+		  * buff_Q,             // for holding the info for the previous HH matrices
+		  * buff_T,				// for holding the middle T matrix in a VTV' 
+								// representation of a HH matrix
 		  * buff_A21;			 
 		  // suffix 'c' means "copy," 'l' means "local" (i.e. value for the loop step)
   
-  int     * buff_p, * buff_pl;
+  int     * buff_p, * buff_pl; // pivot vectors 
+  int     * buff_p_Y, * buff_p_Yl; // pivot vectors determined by Y
   
-  int     i, j, k,
+  int     i, j, k, ii, jj, kk, // TODO: do we use all these?
 		  b, last_iter, mn_A;
   double  d_zero = 0.0, d_one = 1.0;
+  char    n = 'n', t = 't';
   FILE    * A_fp;
   size_t err_check;
+  int nb_alg_l;
 
 #ifdef PROFILE
  struct timespec t1, t2;
@@ -235,6 +284,8 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
   // Initialize the seed for the generator of random numbers.
   srand( 12 );
 
+  // TODO: do we need all these objects still, for this left-looking algorithm?
+
   // Create auxiliary objects.
   m_Y     = nb_alg + pp;
   n_Y     = n_A;
@@ -261,16 +312,37 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
   }
   ldim_A1121 = m_A;
 
+  m_A_cols = m_A;
+  n_A_cols = num_cols_read;
+  buff_A_cols = ( double * ) malloc( m_A_cols * n_A_cols * sizeof( double ) );
+  ldim_A_cols = m_A;
+
+  m_A_mid = m_A;
+  n_A_mid = nb_alg;
+  buff_A_mid = ( double * ) malloc( m_A_mid * n_A_mid * sizeof( double ) );
+  ldim_A_mid = m_A;
+
   m_A21    = nb_alg;
   n_A21    = n_A;
   buff_A21 = ( double * ) malloc( m_A21 * n_A21 * sizeof( double ) );
   ldim_A21 =  nb_alg;
   
-  m_work    = m_A;
+  m_work    = max( m_A, n_A ) ;
   n_work    = nb_alg;
   buff_work = ( double * ) malloc( m_work * n_work * sizeof( double ) ); 
-  ldim_work = m_A;
+  ldim_work = max( m_A, n_A );
 
+  m_Q    = m_A;
+  n_Q    = num_cols_read;
+  buff_Q = ( double * ) malloc( m_Q * n_Q * sizeof( double ) ); 
+  ldim_Q = m_A;
+
+  m_T    = nb_alg;
+  n_T    = nb_alg;
+  buff_T = ( double * ) malloc( m_T * n_T * sizeof( double ) ); 
+  ldim_T = nb_alg; 
+
+  buff_p_Y = ( int * ) malloc( m_A * sizeof( int ) );
 
   // Initialize matrices G and Y.
   NoFLA_Normal_random_matrix( nb_alg + pp, m_A, buff_G, ldim_G );
@@ -294,14 +366,14 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 #endif
 
   // Main Loop.
-  for( j = 0; j < mn_A; j += nb_alg ) {
+  for ( j = 0; j < mn_A; j += nb_alg ) {
     b = min( nb_alg, min( n_A - j, m_A - j ) );
 
     // Check whether it is the last iteration.
     last_iter = ( ( ( j + nb_alg >= m_A )||( j + nb_alg >= n_A ) ) ? 1 : 0 );
 
     // Some initializations for the iteration of this loop.
-    n_Ycl = n_Y - j;
+    n_Y_l = n_Y - j;
     buff_Ycl = & buff_Yc[ 0 + j * ldim_Y ];
     buff_Yl = & buff_Y[ 0 + j * ldim_Y ];
     buff_pl = & buff_p[ j ];
@@ -317,98 +389,189 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
     m_A21 = nb_alg;
 	n_A21 = n_A - j;
 
-    m_work = m_A - j;
-	n_work = b;
+    m_G = nb_alg;
+	n_G = m_A - b;
+
+	n_A_mid_l = b;
 
     buff_Y2 = & buff_Y[ 0 + min( n_Y - 1, j + b ) * ldim_Y ];
     buff_G1 = & buff_G[ 0 + j * ldim_G ];
     buff_G2 = & buff_G[ 0 + min( n_G - 1, j + b ) * ldim_G ];
+
+    buff_p_Yl = & buff_p_Y[ j ];
+	for ( i=0; i < n_A - j; i++ ) {
+	  buff_p_Yl[ i ] = i;
+	}
       
     if( last_iter == 0 ) {
-      // Compute QRP of YR, and apply permutations to matrix AR.
-      // A copy of YR is made into Ycl, and permutations are applied to YR.
+	/*
+	  // generate G
+      NoFLA_Normal_random_matrix( nb_alg, m_A, buff_G, ldim_G );
 
-      dlacpy_( "All", & m_Y, & n_Ycl, buff_Yl, & ldim_Y,
-                                     buff_Ycl, & ldim_Y );
+      // generate YR
+	  for ( i=j; i<n_A; i+= num_cols_read ) {	
+	    
+	    n_A_cols_l = min( num_cols_read, n_A - i );	
+
+	    // read out block of cols of A, A_i
+		fseek( A_fp, ( 0 + ( i ) * ldim_A ) * sizeof( double ), SEEK_SET );	
+		err_check = fread( buff_A_cols, sizeof( double ), m_A_cols * n_A_cols_l, A_fp );
+	    if ( err_check != m_A_cols * n_A_cols_l ) {
+		  printf( "Error! Read of block of A for building of Y failed!\n" );
+		  return 1;
+		}
+
+		// update the block A_i
+		for ( k=0; k < j; k += num_cols_read ) {
+
+		  n_Q_l = min( num_cols_read, j - k );
+
+		  // read out block containing HH vectors
+		  fseek( A_fp, ( 0 + ( k ) * ldim_A ) * sizeof( double ), SEEK_SET );	
+		  err_check = fread( buff_Q, sizeof( double ), m_Q * n_Q_l, A_fp );
+		  if ( err_check != m_Q * n_Q_l ) {
+			printf( "Error! Read of block of Q for building of Y failed!\n" );
+			return 1;
+		  }
+
+		  // apply HH vectors to A_i
+		  for ( ii=0; ii<n_Q_l; ii+=nb_alg  ) {
+		   
+		    nb_alg_l = min( nb_alg, n_Q_l - ii );
+
+			dlarft_fc( m_A - k - ii, nb_alg_l,
+					   & buff_Q[ ( k + ii ) + ( ii ) * ldim_Q ], ldim_Q,
+					   & buff_tau[ k + ii ],
+					   buff_T, ldim_T );
+
+			dlarfb_ltfc( m_A_cols - k - ii, n_A_cols_l, nb_alg_l,
+						 & buff_Q[ ( k + ii ) + ( ii ) * ldim_Q ], ldim_Q,
+						 buff_T, ldim_T,
+						 & buff_A_cols[ ( k + ii ) + ( 0 ) * ldim_A_cols ], ldim_A_cols,
+						 buff_work, ldim_work );
+
+		  } // for ii
+
+		} // for k
+
+		// compute a block of cols of Y, Y_i = G * A_i
+		dgemm( & n, & n, & m_G, & n_A_cols_l, & n_G,
+			   & d_one,
+			   buff_G, & ldim_G,
+			   & buff_A_cols[ j + ( 0 ) * ldim_A_cols ], & ldim_A_cols,
+			   & d_one,
+			   buff_Y, & ldim_Y );
+
+	  } // for i
+
+      // Compute QRP of Y.
       QRP_WY( 1, b,
-          m_Y, n_Ycl, buff_Ycl, ldim_Y, buff_pl, buff_tl,
+          m_Y, n_Y_l, buff_Y, ldim_Y, buff_p_Yl, buff_tl,
+          1, 1, buff_pl, 1,
           0, 0, NULL, 0,
-          1, m_Y, buff_Yl, ldim_Y,
           0, NULL, 0 );
+		  */
+	} // if (last_iter == 0)
 
-	}
-
-    // Update panel AB1 = [ A11; A21 ] then
+    // Update panel [ A12; A22; A32 ]
     // Compute QRP.
-    // Apply same permutations to A01 and Y1, and build T1_T.
+    // Apply same permutations to A12, and build T1_T.
     //
 
-	  // read out block of matrix [ A11; A21 ], applying the permutation as we read
-	  for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
-		
-		fseek( A_fp, ( j + ( buff_pl[ i ] ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
-		err_check = fread( & buff_A1121l[ 0 + i * ldim_A1121 ],
-						sizeof( double ), m_A1121l, A_fp );			   
-		if ( err_check != m_A1121l ) {
-		  printf( "Error! read of block [A11; A21] failed!\n Number of entries read: %d; number of entries attempted: %d \n starting entry in matrix: %lli \n", (int) err_check, m_A1121l, (j + buff_pl[i])*( ( long long int ) ldim_A ) );
+	  // read out block of matrix [ A12; A22; A32 ]; apply the permutation as we read unless we're on the last iteration 
+	  if ( last_iter == 0 ) {
+		for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
+		  // read out column from original position to be processed
+		  fseek( A_fp, ( j + ( buff_p_Yl[ i ] ) ) * ldim_A * 
+				 sizeof( double ), SEEK_SET );
+		  err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ],
+							 sizeof( double ), m_A, A_fp );
+		  if ( err_check != m_A ) {
+		    printf( "Error! Read of to-be-processed col of A failed!" );
+			return 1;
+		  }
+		  // read out column from original position to be swapped 
+		  fseek( A_fp, ( j + i ) * ldim_A * 
+				 sizeof( double ), SEEK_SET );
+		  err_check = fread( buff_A_cols,
+							 sizeof( double ), m_A, A_fp );
+		  if ( err_check != m_A ) {
+		    printf( "Error! Read of to-be-permuted col of A failed!" );
+			return 1;
+		  }
+		  // write out swapped column to new position for later processing
+		  fseek( A_fp, ( j + ( buff_p_Yl[ i ] ) ) * ldim_A * 
+				 sizeof( double ), SEEK_SET );
+		  fwrite( buff_A_cols, sizeof( double ), m_A, A_fp );
+
+		} // for i
+	  } else { // just read out last cols of A; nothing needs to be swapped 
+		fseek( A_fp, ( j ) * ldim_A * 
+			   sizeof( double ), SEEK_SET );
+		err_check = fread( buff_A_mid,
+						   sizeof( double ), m_A * b, A_fp );
+		if ( err_check != m_A * b ) {
+		  printf( "Error! Read of to-be-processed block of A failed!" );
 		  return 1;
 		}
-	  }
 
-      // update A1121 by applying Q to it
+	  } // if
 
-	  //TODO
+      // update the entire block of cols by applying Q to it
+	  for ( i=0; i < j; i += num_cols_read ) {
 
-	  // compute QRP; apply permutations to Y1 
+		n_Q_l = min( num_cols_read, j - i );
+
+		// read out block containing HH vectors
+		fseek( A_fp, ( 0 + ( i ) * ldim_A ) * sizeof( double ), SEEK_SET );	
+		err_check = fread( buff_Q, sizeof( double ), m_Q * n_Q_l, A_fp );
+		if ( err_check != m_Q * n_Q_l ) {
+		  printf( "Error! Read of block of Q for building of Y failed!\n" );
+		  return 1;
+		}
+
+		// apply HH vectors to A_mid
+		for ( k=0; k<n_Q_l; k+=nb_alg  ) {
+		 
+		  nb_alg_l = min( nb_alg, n_Q_l - k );
+
+		  dlarft_fc( m_A - i - k, nb_alg_l,
+					 & buff_Q[ ( i + k ) + ( k ) * ldim_Q ], ldim_Q,
+					 & buff_tau[ i + k ],
+					 buff_T, ldim_T );
+
+		  dlarfb_ltfc( m_A_mid - i - k, n_A_mid_l, nb_alg_l,
+					   & buff_Q[ ( i + k ) + ( k ) * ldim_Q ], ldim_Q,
+					   buff_T, ldim_T,
+					   & buff_A_mid[ ( i + k ) + ( 0 ) * ldim_A_mid ], ldim_A_mid,
+					   buff_work, ldim_work );
+
+		} // for k
+
+	  } // for i
+
+	  // compute QRP;
 	  QRP_WY( panel_pivoting, -1,
-        m_A1121l, n_A1121l, buff_A1121l, ldim_A, buff_pl, buff_tl,
+        m_A_mid - j, n_A_mid_l, 
+		& buff_A_mid[ j + ( 0 ) * ldim_A_mid ], ldim_A_mid, 
+		buff_pl, buff_tl,
         0, 0, NULL, 0,
-        1, m_Y, buff_Y1, ldim_Y,
-        1, buff_Wl, ldim_W );
-
+        1, j, buff_A_mid, ldim_A_mid,
+        0, NULL, 0 );
       
-	  // write out results of above QRP to ORIGINAL columns of A
-	  for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
-	    fseek( A_fp, ( j + ( buff_pl[ i ] ) * ( (long long int) ldim_A1121 ) ) * sizeof( double ), SEEK_SET );
-		err_check = fwrite( & buff_A1121l[ 0 + i * ldim_A1121 ], sizeof( double ), m_A1121l, A_fp );
-	    if ( (int) err_check != m_A1121l ) {
-		  printf("Error! Writing of the factorization of [A11; A21] to file failed \n");
-		  return 1;
-		}
+	  // write out results of above QRP
+	  fseek( A_fp, ( j ) * ldim_A * 
+			 sizeof( double ), SEEK_SET );
+	  fwrite( buff_A_mid, sizeof( double ), m_A_mid * n_A_mid_l, A_fp );
+
+	  if (j == 5 * nb_alg) {
+	    double * buff_temp = ( double * ) malloc( m_A * n_A * sizeof(double) );
+	    fseek( A_fp, 0, SEEK_SET );
+		err_check = fread( buff_temp, sizeof(double), m_A * n_A, A_fp );
+		print_double_matrix("A1",m_A, n_A, buff_temp, ldim_A );		
+		free(buff_temp);
 	  }
-
-    //
-    // Update block A21 and then use it to downdate matrix Y.
-    //
-    if ( ! last_iter ) {
-
-      // read a block of rows of A
-
-      for ( i=j + b; i < n_A; i++ ) {
-	    fseek( A_fp, ( j + ( buff_p[ i ] ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
-		err_check = fread( & buff_A21[ 0 + ( i - j - b ) * ldim_A21 ], m_A21, sizeof( double ), A_fp );
-	  }	  
-
-      // update A21 by applying all previous rotations from Q
-
-	  // TODO
-
-	  // downdate Y
-      Downdate_Y(
-        b, b, buff_A1121l, ldim_A1121,
-        m_A1121l - b, n_A1121l - b, & buff_A1121l[ b + 0 * ldim_A1121 ], ldim_A1121,
-        m_A21, n_A21, buff_A21, ldim_A21,
-        b, b, buff_Wl, ldim_W,
-        m_Y, max( 0, n_Y - j - b ), buff_Y2, ldim_Y,
-        m_G, b, buff_G1, ldim_G,
-        m_G, max( 0, n_G - j - b ), buff_G2, ldim_G );
-	   
-      // write out A21 to drive
-
-	  // TODO
-
-    }
-  }
+  } // for j
 
 #ifdef PROFILE
   t_tot += t_read + t_write + t_init_Y + t_qr_Y +
@@ -434,7 +597,12 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
   free( buff_W );
   free( buff_A1121 );
   free( buff_A21 );
+  free( buff_A_cols );
+  free( buff_A_mid );
   free( buff_work );
+  free( buff_Q );
+  free( buff_T );
+  free( buff_p_Y );
 
   return 0;
 }
@@ -508,6 +676,49 @@ static int Mult_BA_A_out( int m, int n, int k,
 
   // free memory
   free( A_bl_p );
+
+}
+
+// ============================================================================
+static int dlarft_fc( int n, int k, double * buff_V, int ldim_V,
+					  double * buff_tau,
+					  double * buff_T, int ldim_T ) {
+// performs the same function as the LAPACK dlarft, with parameters
+// direct = "F",
+// storev = "C"
+  
+  char f = 'F', c = 'C';
+
+  dlarft( & f, & c,
+		  & n, & k, 
+		  buff_V, & ldim_V,
+		  buff_tau,
+		  buff_T, & ldim_T );
+  
+  return 0;
+
+}
+// ============================================================================
+static int dlarfb_ltfc( int m_A, int n_A, int k,
+						double * buff_V, int ldim_V,
+						double * buff_T, int ldim_T,
+						double * buff_A, int ldim_A,
+						double * buff_work, int ldim_work ) {
+// carries out the lapack function dlarfb, with parameters
+// side = "L",
+// trans = "T",
+// direct = "F",
+// storev = "C"
+
+  char l = 'L', t = 'T', f = 'F', c = 'C';
+
+  dlarfb( & l, & t, & f, & c,
+		  & m_A, & n_A, & k, 
+		  buff_V, & ldim_V, buff_T, & ldim_T,
+		  buff_A, & ldim_A,
+		  buff_work, & ldim_work );
+
+  return 0;
 
 }
 
@@ -714,7 +925,7 @@ static int NoFLA_Apply_Q_WY_rnfc_blk_var4(
 static int QRP_WY( int pivoting, int num_stages, 
                int m_A, int n_A, double * buff_A, int ldim_A,
                int * buff_p, double * buff_t, 
-               int pivot_B, int m_B, double * buff_B, int ldim_B,
+               int pivot_B, int m_B, int * buff_B, int ldim_B,
                int pivot_C, int m_C, double * buff_C, int ldim_C,
                int build_T, double * buff_T, int ldim_T ) {
 //
@@ -938,7 +1149,7 @@ static int Apply_pivot_ooc( int m_A, int n_A, FILE * A_fp, int ldim_A,
 // ============================================================================
 static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
                int m_G, double * buff_G, int ldim_G, 
-               int pivot_B, int m_B, double * buff_B, int ldim_B, 
+               int pivot_B, int m_B, int * buff_B, int ldim_B, 
                int pivot_C, int m_C, double * buff_C, int ldim_C, 
                int * buff_p,
                double * buff_d, double * buff_e ) {
@@ -947,7 +1158,8 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
 // Matrices B and C are optionally pivoted.
 //
   int     ival, i_one = 1;
-  double  * ptr_g1, * ptr_g2, * ptr_b1, * ptr_b2, * ptr_c1, * ptr_c2;
+  double  * ptr_g1, * ptr_g2, * ptr_c1, * ptr_c2;
+  int     btemp;
 
   // Swap columns of G, pivots, and norms.
   if( j_max_col != 0 ) {
@@ -959,9 +1171,9 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
 
     // Swap full column 0 and column "j_max_col" of B.
     if( pivot_B ) {
-      ptr_b1 = & buff_B[ 0 + 0         * ldim_B ];
-      ptr_b2 = & buff_B[ 0 + j_max_col * ldim_B ];
-      dswap( & m_B, ptr_b1, & i_one, ptr_b2, & i_one );
+	  btemp = buff_B[ 0 + 0 * ldim_B ]; 
+      buff_B[ 0 + 0 * ldim_B ] = buff_B[ 0 + j_max_col * ldim_B ];
+	  buff_B[ 0 + j_max_col * ldim_B ] = btemp;
     }
 
     // Swap full column 0 and column "j_max_col" of C.

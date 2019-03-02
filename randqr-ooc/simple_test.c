@@ -61,7 +61,7 @@ int main( int argc, char *argv[] ) {
   // Create matrix A, vector p, vector s, and matrix Q.
   m_A      = 100;
   n_A      = 100;
-  nb_alg   = 20;
+  nb_alg   = 18;
   k        = n_A;
   pp	   = 0;
 
@@ -84,9 +84,9 @@ int main( int argc, char *argv[] ) {
 
   // Generate binary file which stores the matrix (out of core)
   matrix_generate_ooc( m_A, n_A, dir_name, A_fname ); 
-  A_fp = fopen( A_fname, "r" );
 
   // transfer matrix to in-core
+  A_fp = fopen( file_path, "r" );
   read_check = fread( buff_A, sizeof( double ), m_A * n_A, A_fp );
   fseek( A_fp, 0, SEEK_SET );
   read_check = fread( buff_Ac, sizeof( double ), m_A * n_A, A_fp );
@@ -155,13 +155,13 @@ int main( int argc, char *argv[] ) {
 
   // check whether OOC gets same results as in core
 #ifdef CHECK_OOC
-  A_fp = fopen( A_fname, "r" );
+  A_fp = fopen( file_path, "r" );
   for ( i=0; i < n_A; i++ ) {
     fseek( A_fp, ( 0 +  i * ldim_A ) * sizeof( double ), SEEK_SET );
     read_check = fread( & buff_A[ 0 + i * ldim_A ], sizeof( double ), m_A, A_fp );
   }
   fclose( A_fp );
-
+  
   for ( i=0; i < m_A * n_A; i++ ) {
     if ( abs( buff_A[ i ] - buff_Ac[ i ] ) > ( 1E-12 ) ) eq_check = 0; 
   }
@@ -181,7 +181,7 @@ int main( int argc, char *argv[] ) {
 
   // Print results.
 #ifdef PRINT_DATA
-  A_fp = fopen( A_fname, "r" );
+  A_fp = fopen( file_path, "r" );
   for ( i=0; i < n_A; i++ ) {
     fseek( A_fp, ( 0 + i * ldim_A ) * sizeof( double ), SEEK_SET );
     fread( & buff_A[ 0 + i * ldim_A ], sizeof( double ), m_A, A_fp );

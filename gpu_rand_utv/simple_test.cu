@@ -60,7 +60,7 @@ int main() {
   n_A      = 400;
   bl_size =  128;
   q_iter = 2;
-  pp = 128;
+  pp = 0;
 
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );
   ldim_A   = max( 1, m_A );
