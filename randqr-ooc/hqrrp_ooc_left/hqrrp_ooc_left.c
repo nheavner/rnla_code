@@ -677,6 +677,8 @@ static int Mult_BA_A_out( int m, int n, int k,
   // free memory
   free( A_bl_p );
 
+  return 0;
+
 }
 
 // ============================================================================
@@ -1134,16 +1136,6 @@ static int NoFLA_QRP_downdate_partial_norms( int m_A, int n_A,
   }
 
   return 0;
-}
-
-// ============================================================================
-static int Apply_pivot_ooc( int m_A, int n_A, FILE * A_fp, int ldim_A,
-				int * buff_p ) {
-  // applies a permutation vector to the matrix stored in the file
-  // pointed to by A_fp
-
-
-
 }
 
 // ============================================================================
