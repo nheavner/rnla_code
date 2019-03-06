@@ -1,8 +1,8 @@
 # Definitions of variables
 
-CC = icc# gcc-6
+CC = gcc
 CCFLAGS = -O
-LD = icc# gcc-6
+LD = gcc
 LDFLAGS = -O
 
 # Definitions of rules
