@@ -24,7 +24,7 @@ static void matrix_generate( int m_A, int n_A,
 int main() {
   
   int     ldim_A;
-  double  * buff_A, * buff_Acp, * buff_U, * buff_Vt, * buff_ss, * buff_tau;
+  double  * buff_A, * buff_Acp, * buff_Acpp, * buff_U, * buff_Vt, * buff_ss, * buff_tau;
   magma_int_t * buff_p; // pivot vector for cpqr
 
   double * work_h;
@@ -35,7 +35,7 @@ int main() {
 
   int i, j;
 
-  int n_A[] = {2000,3000,4000,5000,6000,8000,10000,12000,15000};
+  int n_A[] = {2000,3000};//,4000,5000,6000,8000,10000,12000,15000};
 
   // for timing
   timespec t1, t2;
@@ -90,6 +90,21 @@ int main() {
 		// allocate memory
 	    magma_dmalloc_pinned( & work_h, lwork );
 		magma_imalloc_pinned( & iwork_h, 8 * n_A[i] );
+
+		if ( i == 0 ) {
+		  // if at the beginning, run once before timing to mitigate startup cost
+		  buff_Acpp    = ( double * ) malloc( n_A[ i ] * n_A[ i ] * sizeof( double ) );
+		  for ( j=0; j < n_A[i] * n_A[i]; j++ ) {
+			buff_Acpp[ j ] = buff_A[ j ]; 
+		  }
+		  magma_dgesdd( MagmaAllVec,
+						n_A[i], n_A[i], buff_Acpp, ldim_A,
+						buff_ss,
+						buff_U, n_A[i],
+						buff_Vt, n_A[i],
+						work_h, lwork, iwork_h, magInfo );
+		  free( buff_Acpp );
+		}
   
 		// start timing
 		cudaDeviceSynchronize();

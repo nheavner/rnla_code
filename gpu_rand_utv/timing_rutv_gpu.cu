@@ -27,9 +27,9 @@ int main() {
 
   int i, j;
 
-  int bl_size = 256;
+  int bl_size = 128;
   int n_A[] = {2000,3000,4000,5000,6000,8000,10000,12000,15000};
-  int q[] = {1,2};//2,3,4};
+  int q[] = {0,1,2};//2,3,4};
   int p = 0;
 
   // for timing
@@ -57,6 +57,15 @@ int main() {
 
 	  // Generate matrix.
 	  matrix_generate( n_A[ i ], n_A[ i ], buff_A, ldim_A );
+	  
+	  if ( i == 0 && j == 0 ) {
+	    // do one factorization before we start timing to get rid
+		// of "warmup" cost
+		rand_utv_gpu( n_A[i], n_A[i], buff_A, ldim_A,
+					  1, n_A[i], n_A[i], buff_U, n_A[i],
+					  1, n_A[i], n_A[i], buff_V, n_A[i],
+					  bl_size, p, q[j] );
+	  }
 
 	  // Factorize matrix.
 	  printf( "%% Working on n = %d \n", n_A[ i ] );
@@ -87,7 +96,7 @@ int main() {
   }
 
   // write results to file
-  ofp = fopen( "times_rutv_gpu_OS_ON.m", & mode );
+  ofp = fopen( "times_rutv_gpu.m", & mode );
 
 	fprintf( ofp, "%% block size was %d \n \n", bl_size );
 

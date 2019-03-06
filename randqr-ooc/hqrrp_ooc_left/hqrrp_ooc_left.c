@@ -345,6 +345,7 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
   buff_p_Y = ( int * ) malloc( m_A * sizeof( int ) );
 
   // Initialize matrices G and Y.
+  // TODO: remove ability to oversample, b/c it isn't implemented everywhere
   NoFLA_Normal_random_matrix( nb_alg + pp, m_A, buff_G, ldim_G );
  
 #ifdef PROFILE
@@ -390,7 +391,7 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 	n_A21 = n_A - j;
 
     m_G = nb_alg;
-	n_G = m_A - b;
+	n_G = m_A - j;
 
 	n_A_mid_l = b;
 
@@ -404,9 +405,18 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 	}
       
     if( last_iter == 0 ) {
-	/*
 	  // generate G
-      NoFLA_Normal_random_matrix( nb_alg, m_A, buff_G, ldim_G );
+      NoFLA_Normal_random_matrix( nb_alg, m_A - j, buff_G, ldim_G );
+
+	  if ( j == 1 * nb_alg ) {
+	    print_int_vector("p3", n_A, buff_p);
+	    print_double_matrix("G3", m_G, n_G, buff_G, ldim_G);
+	    double * buff_temp = ( double * ) malloc( m_A * n_A * sizeof(double) );
+	    fseek( A_fp, 0, SEEK_SET );
+		err_check = fread( buff_temp, sizeof(double), m_A * n_A, A_fp );
+		print_double_matrix("A3",m_A, n_A, buff_temp, ldim_A );		
+		free(buff_temp);
+	  }
 
       // generate YR
 	  for ( i=j; i<n_A; i+= num_cols_read ) {	
@@ -449,20 +459,28 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 						 buff_T, ldim_T,
 						 & buff_A_cols[ ( k + ii ) + ( 0 ) * ldim_A_cols ], ldim_A_cols,
 						 buff_work, ldim_work );
+		if ( j == 1*nb_alg && i == j && k == 0 & ii == 0 ) {
+		  print_double_matrix( "Ai", m_A_cols, n_A_cols_l, buff_A_cols, ldim_A_cols );
+		}
 
 		  } // for ii
 
 		} // for k
+
 
 		// compute a block of cols of Y, Y_i = G * A_i
 		dgemm( & n, & n, & m_G, & n_A_cols_l, & n_G,
 			   & d_one,
 			   buff_G, & ldim_G,
 			   & buff_A_cols[ j + ( 0 ) * ldim_A_cols ], & ldim_A_cols,
-			   & d_one,
-			   buff_Y, & ldim_Y );
+			   & d_zero,
+			   & buff_Y[ 0 + ( i - j ) * ldim_Y ], & ldim_Y );
 
 	  } // for i
+	  
+	  if ( j == 1 * nb_alg ) {
+	    print_double_matrix("Y3", nb_alg, n_A - j, buff_Y, ldim_Y);
+	  }
 
       // Compute QRP of Y.
       QRP_WY( 1, b,
@@ -470,7 +488,7 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
           1, 1, buff_pl, 1,
           0, 0, NULL, 0,
           0, NULL, 0 );
-		  */
+
 	} // if (last_iter == 0)
 
     // Update panel [ A12; A22; A32 ]
