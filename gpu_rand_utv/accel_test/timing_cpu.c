@@ -45,7 +45,7 @@ int main( int argc, char *argv[] ) {
   double d_one = 1.0, d_zero = 0.0;
 
   int bl_size = 128;
-  int n_A[] = {15000};//{500,1000,2000,3000,4000,5000,6000,8000,10000,12000,15000};
+  int n_A[] = {1000,2000,3000,4000,5000,6000,8000,10000,12000,15000};
   int q = 2;
   int p = 0;
 
@@ -95,10 +95,12 @@ int main( int argc, char *argv[] ) {
 
 	  // compute unpivoted QR of A
 	  time1 = start_timer(); 
+	  /*
 	  dgeqrf( & n_A[ i ], & n_A[ i ], 
 			  buff_A, & ldim_A,
 			  buff_tau, 
 			  buff_work, & lwork, & info );
+			  */
 	  if ( info != 0 ) {
 		printf( "Error! dgeqrf failed!" );
 		return 1;
@@ -113,10 +115,12 @@ int main( int argc, char *argv[] ) {
 	  lwork = ( int ) work_opt;
 	  free( buff_work ); 
 	  buff_work = ( double * ) malloc( lwork * sizeof( double ) );
+	  /*
 	  dorgqr( & n_A[ i ], & n_A[ i ], & n_A[ i ],
 			  buff_A, & ldim_A,
 			  buff_tau,
 			  buff_work, & lwork, & info);
+	*/
 	  if ( info != 0 ) {
 		printf( "Error! dorgqr failed!" );
 		return 1;
@@ -142,12 +146,14 @@ int main( int argc, char *argv[] ) {
 
 	  // perform factorization
 	  time1 = start_timer(); 
+	  /*
 	  dgesdd( & all, & n_A[ i ], & n_A[ i ],
 			  buff_A, & ldim_A,
 			  buff_ss, buff_U, & ldim_A, buff_V, & ldim_A,
 			  buff_work, & lwork, buff_iwork, & info );	
 			  // note: dgesdd actually returns Vt, not V;
 			  //	   irrelevant here
+			  */
 	  if ( info != 0 ) {
 		printf( "Error! dgesdd failed!" );
 		return 1;
@@ -210,10 +216,12 @@ int main( int argc, char *argv[] ) {
 
 	  // perform factorization
 	  time1 = start_timer(); 
+	  /*
 	  NoFLA_UTV_WY_blk_var2( n_A[ i ], n_A[ i ], buff_A, ldim_A,
 							 1, n_A[ i ], n_A[ i ], buff_U, ldim_A,
 							 1, n_A[ i ], n_A[ i ], buff_V, ldim_A,
 							 bl_size, p, q );
+	  */
 	  t_randutv_cpu[ i ] = stop_timer(time1);
 
 	// dgemm
@@ -225,11 +233,13 @@ int main( int argc, char *argv[] ) {
 
 	  // perform operation
 	  time1 = start_timer(); 
+	  /*
 	  dgemm( & n, & n, & n_A[ i ], & n_A[ i ], & n_A[ i ],
 			 & d_one, 
 			 buff_A, & ldim_A, buff_B, & ldim_A,
 			 & d_zero,
 			 buff_C, & ldim_A );
+	  */
 	  t_dgemm_cpu[ i ] = stop_timer(time1);
 
 	// free matrices
