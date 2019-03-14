@@ -35,7 +35,7 @@ int main() {
 
   int i, j;
 
-  int n_A[] = {2000,3000};//,4000,5000,6000,8000,10000,12000,15000};
+  int n_A[] = {2000,3000,4000,5000,6000,8000,10000,12000,15000};
 
   // for timing
   timespec t1, t2;
@@ -158,6 +158,16 @@ int main() {
 						buff_p,
 						buff_tau,
 						work_h, lwork, magInfo );
+		if ( * magInfo != 0 ) {
+		  printf( "Warning! dgeqp3 failed \n" );
+		}
+		magma_dorgqr2( n_A[i], n_A[i], n_A[ i ],
+						buff_Acp, ldim_A,
+						buff_tau,
+						magInfo );
+		if ( * magInfo != 0 ) {
+		  printf( "Warning! dorgqr2 failed \n" );
+		}
 
 		// stop timing and record time
 		cudaDeviceSynchronize();
