@@ -3,8 +3,7 @@ clear
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% read in data %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 times_std
-times_rutv_gpu
-times_rutv_gpu_OS_ON
+times_powurv_gpu
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% plot %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 figure(1);
