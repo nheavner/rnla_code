@@ -168,7 +168,7 @@ static void print_int_vector( char * name, int n_v, int * buff_v ) {
 // ============================================================================
 int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-        int nb_alg, int pp,
+        int nb_alg, int kk, int pp,
 		int panel_pivoting, int num_cols_read ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
@@ -408,16 +408,6 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 	  // generate G
       NoFLA_Normal_random_matrix( nb_alg, m_A - j, buff_G, ldim_G );
 
-	  if ( j == 1 * nb_alg ) {
-	    print_int_vector("p3", n_A, buff_p);
-	    print_double_matrix("G3", m_G, n_G, buff_G, ldim_G);
-	    double * buff_temp = ( double * ) malloc( m_A * n_A * sizeof(double) );
-	    fseek( A_fp, 0, SEEK_SET );
-		err_check = fread( buff_temp, sizeof(double), m_A * n_A, A_fp );
-		print_double_matrix("A3",m_A, n_A, buff_temp, ldim_A );		
-		free(buff_temp);
-	  }
-
       // generate YR
 	  for ( i=j; i<n_A; i+= num_cols_read ) {	
 	    
@@ -459,9 +449,6 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 						 buff_T, ldim_T,
 						 & buff_A_cols[ ( k + ii ) + ( 0 ) * ldim_A_cols ], ldim_A_cols,
 						 buff_work, ldim_work );
-		if ( j == 1*nb_alg && i == j && k == 0 & ii == 0 ) {
-		  print_double_matrix( "Ai", m_A_cols, n_A_cols_l, buff_A_cols, ldim_A_cols );
-		}
 
 		  } // for ii
 
@@ -478,10 +465,6 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 
 	  } // for i
 	  
-	  if ( j == 1 * nb_alg ) {
-	    print_double_matrix("Y3", nb_alg, n_A - j, buff_Y, ldim_Y);
-	  }
-
       // Compute QRP of Y.
       QRP_WY( 1, b,
           m_Y, n_Y_l, buff_Y, ldim_Y, buff_p_Yl, buff_tl,
@@ -511,18 +494,28 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 		  // read out column from original position to be swapped 
 		  fseek( A_fp, ( j + i ) * ldim_A * 
 				 sizeof( double ), SEEK_SET );
-		  err_check = fread( buff_A_cols,
+		  err_check = fread( & buff_A_cols[ 0 + i * ldim_A_cols ],
 							 sizeof( double ), m_A, A_fp );
 		  if ( err_check != m_A ) {
 		    printf( "Error! Read of to-be-permuted col of A failed!" );
 			return 1;
 		  }
-		  // write out swapped column to new position for later processing
-		  fseek( A_fp, ( j + ( buff_p_Yl[ i ] ) ) * ldim_A * 
-				 sizeof( double ), SEEK_SET );
-		  fwrite( buff_A_cols, sizeof( double ), m_A, A_fp );
-
 		} // for i
+		for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
+		  // find new location for column
+		  int found = 0, new_ind = 0;
+		  while ( found == 0 && new_ind < n_A ) {
+		    if ( buff_p_Yl[ new_ind ] == i ) {
+			  found = 1;
+			} else {
+		      new_ind++;
+			}
+		  }
+		  // write out swapped column to new position for later processing
+		  fseek( A_fp, ( j + new_ind ) * ldim_A * 
+				 sizeof( double ), SEEK_SET );
+		  fwrite( & buff_A_cols[ 0 + i * ldim_A_cols ], sizeof( double ), m_A, A_fp );
+	    } // for i
 	  } else { // just read out last cols of A; nothing needs to be swapped 
 		fseek( A_fp, ( j ) * ldim_A * 
 			   sizeof( double ), SEEK_SET );
@@ -582,13 +575,6 @@ int hqrrp_ooc_left( char * A_fname, int m_A, int n_A, int ldim_A,
 			 sizeof( double ), SEEK_SET );
 	  fwrite( buff_A_mid, sizeof( double ), m_A_mid * n_A_mid_l, A_fp );
 
-	  if (j == 5 * nb_alg) {
-	    double * buff_temp = ( double * ) malloc( m_A * n_A * sizeof(double) );
-	    fseek( A_fp, 0, SEEK_SET );
-		err_check = fread( buff_temp, sizeof(double), m_A * n_A, A_fp );
-		print_double_matrix("A1",m_A, n_A, buff_temp, ldim_A );		
-		free(buff_temp);
-	  }
   } // for j
 
 #ifdef PROFILE

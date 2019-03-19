@@ -10,7 +10,7 @@
 #define max( a, b ) ( (a) > (b) ? (a) : (b) )
 #define min( a, b ) ( (a) < (b) ? (a) : (b) )
 
-#define PRINT_DATA
+//#define PRINT_DATA
 //#define CHECK_OOC
 
 // ============================================================================
@@ -51,11 +51,11 @@ int main( int argc, char *argv[] ) {
   double t_ooc_fact = 0.0;
 
   // Create matrix A, vector p, vector s, and matrix Q.
-  m_A      = 14;//1000;
-  n_A      = 12;//1000;
-  nb_alg   = 2;//128;
+  m_A      = 1000;
+  n_A      = 1000;
+  nb_alg   = 128;
   pp	   = 0;
-  num_cols_read = 5;//400;
+  num_cols_read = 400;
 
   mn_A     = min( m_A, n_A );
   buff_A   = ( double * ) malloc( m_A * n_A * sizeof( double ) );

@@ -25,7 +25,7 @@ timing.x : timing.o hqrrp_ooc.o NoFLA_HQRRP_WY_blk_var4.o
 	@$(LD) $(LDFLAGS) \
             -o timing.x \
             timing.o \
-            hqrrp_ooc.c -lm  \
+            hqrrp_ooc.o \
 			NoFLA_HQRRP_WY_blk_var4.c \
             -Wl,--start-group \
 			/opt/intel/mkl/lib/intel64/libmkl_intel_lp64.a \

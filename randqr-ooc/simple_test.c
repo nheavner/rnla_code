@@ -36,7 +36,7 @@ static void set_pvt_to_zero( int n_p, int * buff_p );
 
 // ============================================================================
 int main( int argc, char *argv[] ) {
-  int     nb_alg, pp, k, m_A, n_A, mn_A, ldim_A, ldim_Q, info, lwork;
+  int     nb_alg, num_cols_read, pp, k, m_A, n_A, mn_A, ldim_A, ldim_Q, info, lwork;
   double  * buff_A, * buff_tau, * buff_Q, * buff_wk_qp4, * buff_wk_orgqr;
   double  * buff_Ac, * buff_tauc;
   int     * buff_p;
@@ -63,6 +63,7 @@ int main( int argc, char *argv[] ) {
   n_A      = 100;
   nb_alg   = 18;
   k        = n_A;
+  num_cols_read = nb_alg; 
   pp	   = 0;
 
   mn_A     = min( m_A, n_A );
@@ -125,7 +126,7 @@ int main( int argc, char *argv[] ) {
   clock_gettime( CLOCK_MONOTONIC, & t1 );
 
   hqrrp_ooc( dir_name, A_fname, m_A, n_A, ldim_A, buff_p, buff_tau, 
-           nb_alg, k, pp, 1 );
+           nb_alg, k, pp, 1, num_cols_read );
 
   clock_gettime( CLOCK_MONOTONIC, & t2 );
   diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;

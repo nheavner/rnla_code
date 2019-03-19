@@ -140,7 +140,7 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
 // ============================================================================
 int NoFLA_HQRRP_WY_blk_var4( int m_A, int n_A, double * buff_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-        int nb_alg, int pp, int k , int panel_pivoting ) {
+        int nb_alg, int k, int pp, int panel_pivoting ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
 // This routine is almost compatible with LAPACK's dgeqp3.

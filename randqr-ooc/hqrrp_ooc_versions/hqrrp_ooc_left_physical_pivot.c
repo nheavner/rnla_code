@@ -1,4 +1,3 @@
-// TODO: this script is unfinished; I think it currently isn't left-looking at all
 /*
 ===============================================================================
 Authors
@@ -48,8 +47,9 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <stdint.h>
 #include <math.h>
 #include <time.h>
+#include <string.h>
 
-#include "hqrrp_ooc.h"
+#include "hqrrp_ooc_left.h"
 #include <mkl.h>
 
 // Matrices with dimensions smaller than THRESHOLD_FOR_DGEQPF are processed 
@@ -77,32 +77,6 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #undef CHECK_DOWNDATING_OF_Y
 
 // Declaration of local prototypes.
-static void print_double_matrix( char * name, int m_A, int n_A, 
-                double * buff_A, int ldim_A ) {
-  int  i, j;
-
-  printf( "%s = [\n", name );
-  for( i = 0; i < m_A; i++ ) {
-    for( j = 0; j < n_A; j++ ) {
-      printf( "%le ", buff_A[ i + j * ldim_A ] );
-    }
-    printf( "\n" );
-  }
-  printf( "];\n" );
-}
-static void print_int_matrix( char * name, int m_A, int n_A, 
-                int * buff_A, int ldim_A ) {
-  int  i, j;
-
-  printf( "%s = [\n", name );
-  for( i = 0; i < m_A; i++ ) {
-    for( j = 0; j < n_A; j++ ) {
-      printf( "%d ", buff_A[ i + j * ldim_A ] );
-    }
-    printf( "\n" );
-  }
-  printf( "];\n" );
-}
 
 static int NoFLA_Normal_random_matrix( int m_A, int n_A, 
                double * buff_A, int ldim_A );
@@ -112,26 +86,25 @@ static double NoFLA_Normal_random_number( double mu, double sigma );
 static int Mult_BA_A_out( int m, int n, int k,
 				FILE * A_fp, int ldim_A, double * B_p, int ldim_B,
 				double * C_p, int ldim_C,
-				int bl_size, int num_cols_read,
-				double * t_read, double * t_write, double * t_init_Y );
+				int bl_size,
+				double * t_read, double * t_write, double * t_seek );
+
+static int dlarft_fc( int n, int k, double * buff_V, int ldim_V,
+					  double * buff_tau,
+					  double * buff_T, int ldim_T );
+
+static int dlarfb_ltfc( int m_A, int n_A, int k,
+						double * buff_V, int ldim_V,
+						double * buff_T, int ldim_T,
+						double * buff_A, int ldim_A,
+						double * buff_work, int ldim_work );
 
 static int Downdate_Y( 
+               int m_U11, int n_U11, double * buff_U11, int ldim_U11,
+               int m_U21, int n_U21, double * buff_U21, int ldim_U21,
                int m_A12, int n_A12, double * buff_A12, int ldim_A12,
+               int m_T, int n_T, double * buff_T, int ldim_T,
                int m_Y2, int n_Y2, double * buff_Y2, int ldim_Y2,
-			   int m_Y_aux, int n_Y_aux, double * buff_Y_aux, int ldim_Y_aux );
-
-static int Form_Y_aux( 
-               int m_U11, int n_U11, double * buff_U11, int ldim_U11,
-               int m_U21, int n_U21, double * buff_U21, int ldim_U21,
-               int m_T, int n_T, double * buff_T, int ldim_T,
-               int m_G1, int n_G1, double * buff_G1, int ldim_G1,
-               int m_G2, int n_G2, double * buff_G2, int ldim_G2,
-			   int m_Y_aux, int n_Y_aux, double * buff_Y_aux, int ldim_Y_aux );
-
-static int Downdate_G( 
-               int m_U11, int n_U11, double * buff_U11, int ldim_U11,
-               int m_U21, int n_U21, double * buff_U21, int ldim_U21,
-               int m_T, int n_T, double * buff_T, int ldim_T,
                int m_G1, int n_G1, double * buff_G1, int ldim_G1,
                int m_G2, int n_G2, double * buff_G2, int ldim_G2 );
 
@@ -169,14 +142,37 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
                int * buff_p,
                double * buff_d, double * buff_e );
 
-static struct timespec start_timer( void );
-
-static double stop_timer( struct timespec t1 );
-
 // ============================================================================
-int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
+// TODO: temporary function for debugging
+void print_double_matrix( char * name, int m_A, int n_A, 
+                 double * buff_A, int ldim_A ) {
+   int  i, j;
+ 
+   printf( "%s = [\n", name );
+   for( i = 0; i < m_A; i++ ) {
+     for( j = 0; j < n_A; j++ ) {
+       printf( "%.16e ", buff_A[ i + j * ldim_A ] );
+     }
+     printf( ";\n" );
+   }
+   printf( "];\n" );
+}
+static void print_int_vector( char * name, int n_v, int * buff_v ) {
+   int  i, j;
+ 
+   printf( "%s = [\n", name );
+   for( i = 0; i < n_v; i++ ) {
+     printf( "%d\n", buff_v[ i ] );
+   }
+   printf( "];\n" );
+ }
+// ============================================================================
+int hqrrp_ooc( char * dir_name, size_t dir_name_size,
+		char * A_fname, size_t A_fname_size, 
+		int m_A, int n_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-        int nb_alg, int kk, int pp, int panel_pivoting ) {
+        int nb_alg, int kk, int pp,
+		int panel_pivoting, int num_cols_read ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
 // This routine is almost compatible with LAPACK's dgeqp3.
@@ -201,61 +197,67 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
 // buff_tau:       Output vector with the tau values of the Householder factors.
 // nb_alg:         Block size. 
 //                 Usual values for nb_alg are 32, 64, etc.
-// kk:             Gives number of columns to process.
-//                 If k == n, a full factorization is computed.
-//                 If k < n, then floor(k / nb_alg) columns are processed
 // pp:             Oversampling size.
 //                 Usual values for pp are 5, 10, etc.
 // panel_pivoting: If panel_pivoting==1, QR with pivoting is applied to 
 //                 factorize the panels of matrix A. Otherwise, QR without 
 //                 pivoting is used. Usual value for panel_pivoting is 1.
+// num_cols_read:  the number of columns of A to read into RAM at once;
+//				   the larger the value, the faster the code will run,
+//				   but the max value is determined by system memory
 //
   int     m_Y, n_Y, ldim_Y,   
           m_W, n_W, ldim_W,		 
           m_G, n_G, ldim_G,
-		  m_A1112, n_A1112, ldim_A1112,
-		  m_A_mid, n_A_mid, ldim_A_mid,
-		  m_A_mid_old, n_A_mid_old, ldim_A_mid_old,
+		  m_A1121, n_A1121, ldim_A1121,
 		  m_work, n_work, ldim_work,
 		  m_A21, n_A21, ldim_A21,
-		  n_Ycl,
-		  m_Y_updt_aux, n_Y_updt_aux, ldim_Y_updt_aux,
-		  m_A1112l, n_A1112l;
+		  m_A_cols, n_A_cols, ldim_A_cols, // for the "blocks of cols" that we read
+		  m_A_mid, n_A_mid, n_A_mid_l, ldim_A_mid,
+		  n_A_cols_l,					   // out a bunch
+		  m_Q, n_Q, ldim_Q, n_Q_l,
+		  m_T, n_T, ldim_T,
+		  n_Y_l,
+		  m_A1121l, n_A1121l;
   
   double  * buff_Y, * buff_Yl,  // the sampling matrix Y 
 		  * buff_Yc, * buff_Ycl,
 		  * buff_Y1, * buff_Y2,
-		  * buff_Y_updt_aux,
 		  * buff_W, * buff_Wl,	// the matrix W in a compact WY rep of a HH matrix
 								// (Y is the HH matrices)
           * buff_t, * buff_tl,  // tau vector for HH matrices 
           * buff_G, * buff_G1, * buff_G2, // random matrix G
-		  * buff_A_mid,         // A_mid = [A12; A22; A32]
-		  * buff_A_mid_old,     // A_mid before the permutations of the current loop had been
-								// applied
-		  * buff_A1112, * buff_A1112l,	  // A1112 = [ A11; A12 ]
-		  * buff_work,			// for holding chunks of cols of A for applying updates
+		  * buff_A1121, * buff_A1121l,	  // A1121 = [ A11; A12 ]
+		  * buff_A_cols,		// for the "blocks of cols" that we read out a bunch
+		  * buff_A_mid,         //  
+		  * buff_work,			// for use in lapack functions 
+		  * buff_Q,             // for holding the info for the previous HH matrices
+		  * buff_T,				// for holding the middle T matrix in a VTV' 
+								// representation of a HH matrix
 		  * buff_A21;			 
 		  // suffix 'c' means "copy," 'l' means "local" (i.e. value for the loop step)
   
-  int     * buff_p, * buff_pl; // pivot vectors
-  int	  * buff_p_Y, * buff_p_Yl; // pivots determined by Y
-  int     * buff_p_bl; // pivots for the tall thin block
+  int     * buff_p, * buff_pl; // pivot vectors 
+  int     * buff_p_Y, * buff_p_Yl; // pivot vectors determined by Y
   
-  int     i, j, k,
+  int     i, j, k, ii, jj, // TODO: do we use all these?
 		  b, last_iter, mn_A;
   double  d_zero = 0.0, d_one = 1.0;
-  int     i_one = 1;
+  char    n = 'n', t = 't';
   FILE    * A_fp;
   size_t err_check;
-  int num_cols_read = 5000;
+  int nb_alg_l;
+
+  char file_path[ dir_name_size / sizeof( dir_name[0] ) + 
+				  A_fname_size / sizeof( A_fname[0] )];
+  strcpy( file_path, dir_name );
+  strcat( file_path, A_fname );
 
 #ifdef PROFILE
- struct timespec time1;
+ struct timespec t1, t2;
+ uint64_t diff;
  double t_read = 0.0, t_write = 0.0, t_seek = 0.0;
  double t_init_Y = 0.0, t_qr_Y = 0.0, t_qr_A = 0.0, t_update_A = 0.0, t_downdate_Y = 0.0;
- double t_downdate_G = 0.0;
- double t_apply_pivot = 0.0;
  double t_tot = 0.0;
 #endif
 
@@ -280,7 +282,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   buff_p = buff_jpvt;
   buff_t = buff_tau;
 
-  A_fp = fopen( A_fname, "r+" );
+  A_fp = fopen( file_path, "r+" );
 
   // Quick return.
   if( mn_A == 0 ) {
@@ -290,17 +292,14 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   // Initialize the seed for the generator of random numbers.
   srand( 12 );
 
+  // TODO: do we need all these objects still, for this left-looking algorithm?
+
   // Create auxiliary objects.
   m_Y     = nb_alg + pp;
   n_Y     = n_A;
   buff_Y  = ( double * ) malloc( m_Y * n_Y * sizeof( double ) );
   buff_Yc  = ( double * ) malloc( m_Y * n_Y * sizeof( double ) );
   ldim_Y  = m_Y;
-
-  m_Y_updt_aux = nb_alg;
-  n_Y_updt_aux = nb_alg;
-  buff_Y_updt_aux = ( double * ) malloc( m_Y_updt_aux * n_Y_updt_aux * sizeof( double ) );
-  ldim_Y_updt_aux = m_Y_updt_aux;
 
   m_W     = nb_alg;
   n_W     = n_A;
@@ -311,59 +310,79 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   n_G     = m_A;
   buff_G  = ( double * ) malloc( m_G * n_G * sizeof( double ) );
   ldim_G  = m_G;
-  
-  m_A_mid    = m_A;
-  n_A_mid    = nb_alg;
-  buff_A_mid = ( double * ) malloc( m_A_mid * n_A_mid * sizeof( double ) );
-  ldim_A_mid = m_A_mid;
 
-  m_A_mid_old    = m_A;
-  n_A_mid_old    = nb_alg;
-  buff_A_mid_old = ( double * ) malloc( m_A_mid_old * n_A_mid_old * sizeof( double ) );
-  ldim_A_mid_old = m_A_mid_old;
-  
-  m_A1112    = m_A;
-  n_A1112    = nb_alg;
-  buff_A1112 = ( double * ) malloc( m_A1112 * n_A1112 * sizeof( double ) );
-  if ( !buff_A1112 ) {
-    printf("Error! Memory allocation for A1112 failed \n");
+  m_A1121    = m_A;
+  n_A1121    = nb_alg;
+  buff_A1121 = ( double * ) malloc( m_A1121 * n_A1121 * sizeof( double ) );
+  if ( !buff_A1121 ) {
+    printf("Error! Memory allocation for A1121 failed \n");
 	return -1;
   }
-  ldim_A1112 = m_A;
+  ldim_A1121 = m_A;
+
+  m_A_cols = m_A;
+  n_A_cols = num_cols_read;
+  buff_A_cols = ( double * ) malloc( m_A_cols * n_A_cols * sizeof( double ) );
+  ldim_A_cols = m_A;
+
+  m_A_mid = m_A;
+  n_A_mid = nb_alg;
+  buff_A_mid = ( double * ) malloc( m_A_mid * n_A_mid * sizeof( double ) );
+  ldim_A_mid = m_A;
 
   m_A21    = nb_alg;
   n_A21    = n_A;
   buff_A21 = ( double * ) malloc( m_A21 * n_A21 * sizeof( double ) );
   ldim_A21 =  nb_alg;
   
-  m_work    = m_A;
-  n_work    = num_cols_read;
+  m_work    = max( m_A, n_A ) ;
+  n_work    = nb_alg;
   buff_work = ( double * ) malloc( m_work * n_work * sizeof( double ) ); 
-  ldim_work = m_A;
+  ldim_work = max( m_A, n_A );
 
-  buff_p_Y  = ( int * ) malloc( m_A * sizeof( int ) ); 
-  buff_p_bl  = ( int * ) malloc( nb_alg * sizeof( int ) ); 
+  m_Q    = m_A;
+  n_Q    = num_cols_read;
+  buff_Q = ( double * ) malloc( m_Q * n_Q * sizeof( double ) ); 
+  ldim_Q = m_A;
+
+  m_T    = nb_alg;
+  n_T    = nb_alg;
+  buff_T = ( double * ) malloc( m_T * n_T * sizeof( double ) ); 
+  ldim_T = nb_alg; 
+
+  buff_p_Y = ( int * ) malloc( m_A * sizeof( int ) );
 
   // Initialize matrices G and Y.
+  // TODO: remove ability to oversample, b/c it isn't implemented everywhere
   NoFLA_Normal_random_matrix( nb_alg + pp, m_A, buff_G, ldim_G );
  
+#ifdef PROFILE
+  clock_gettime( CLOCK_MONOTONIC, & t1 );
+#endif
+
   fseek( A_fp, 0, SEEK_SET );
 
   Mult_BA_A_out( m_Y, n_Y, m_A,
 				A_fp, ldim_A, buff_G, ldim_G,
 				buff_Y, ldim_Y,
-				nb_alg, num_cols_read,
-				& t_read, & t_write, & t_init_Y );
+				nb_alg,
+				& t_read, & t_write, & t_seek );
+
+#ifdef PROFILE
+  clock_gettime( CLOCK_MONOTONIC, & t2 );
+  diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
+  t_init_Y += ( double ) diff / (1E9);
+#endif
 
   // Main Loop.
-  for( j = 0; j < kk; j += nb_alg ) {
+  for ( j = 0; j < kk; j += nb_alg ) {
     b = min( nb_alg, min( n_A - j, m_A - j ) );
 
     // Check whether it is the last iteration.
     last_iter = ( ( ( j + nb_alg >= m_A )||( j + nb_alg >= n_A ) ) ? 1 : 0 );
 
     // Some initializations for the iteration of this loop.
-    n_Ycl = n_Y - j;
+    n_Y_l = n_Y - j;
     buff_Ycl = & buff_Yc[ 0 + j * ldim_Y ];
     buff_Yl = & buff_Y[ 0 + j * ldim_Y ];
     buff_pl = & buff_p[ j ];
@@ -372,242 +391,211 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
     buff_Y1   = & buff_Y[ 0 + j * ldim_Y ];
     buff_Wl = & buff_W[ 0 + j * ldim_W ];
 
-    m_A_mid = m_A;
-	n_A_mid = min( nb_alg, n_A - j );
-
-    m_A_mid_old = m_A;
-	n_A_mid_old = min( nb_alg, n_A - j );
-
-	m_A1112l = m_A - j;
-	n_A1112l = b;
-	buff_A1112l = & buff_A1112[ j + 0 * ldim_A1112 ];
+	m_A1121l = m_A - j;
+	n_A1121l = b;
+	buff_A1121l = & buff_A1121[ j + 0 * ldim_A1121 ];
 
     m_A21 = nb_alg;
 	n_A21 = n_A - j;
 
+    m_G = nb_alg;
+	n_G = m_A - j;
+
+	n_A_mid_l = b;
+
     buff_Y2 = & buff_Y[ 0 + min( n_Y - 1, j + b ) * ldim_Y ];
     buff_G1 = & buff_G[ 0 + j * ldim_G ];
     buff_G2 = & buff_G[ 0 + min( n_G - 1, j + b ) * ldim_G ];
-      
-	buff_p_Yl = & buff_p_Y[ j ];
+
+    buff_p_Yl = & buff_p_Y[ j ];
 	for ( i=0; i < n_A - j; i++ ) {
 	  buff_p_Yl[ i ] = i;
 	}
-	for ( i=0; i < nb_alg; i++ ) {
-	  buff_p_bl[ i ] = i;
-	}
-
+      
     if( last_iter == 0 ) {
-      // Compute QRP of YR, and apply permutations to matrix AR.
-      // A copy of YR is made into Ycl, and permutations are applied to YR.
-#ifdef PROFILE
-  time1 = start_timer();
-#endif
+	  // generate G
+      NoFLA_Normal_random_matrix( nb_alg, m_A - j, buff_G, ldim_G );
 
-      dlacpy_( "All", & m_Y, & n_Ycl, buff_Yl, & ldim_Y,
-                                     buff_Ycl, & ldim_Y );
+      // generate YR
+	  for ( i=j; i<n_A; i+= num_cols_read ) {	
+	    
+	    n_A_cols_l = min( num_cols_read, n_A - i );	
+
+	    // read out block of cols of A, A_i
+		fseek( A_fp, ( 0 + ( i ) * ldim_A ) * sizeof( double ), SEEK_SET );	
+		err_check = fread( buff_A_cols, sizeof( double ), m_A_cols * n_A_cols_l, A_fp );
+	    if ( err_check != m_A_cols * n_A_cols_l ) {
+		  printf( "Error! Read of block of A for building of Y failed!\n" );
+		  return 1;
+		}
+
+		// update the block A_i
+		for ( k=0; k < j; k += num_cols_read ) {
+
+		  n_Q_l = min( num_cols_read, j - k );
+
+		  // read out block containing HH vectors
+		  fseek( A_fp, ( 0 + ( k ) * ldim_A ) * sizeof( double ), SEEK_SET );	
+		  err_check = fread( buff_Q, sizeof( double ), m_Q * n_Q_l, A_fp );
+		  if ( err_check != m_Q * n_Q_l ) {
+			printf( "Error! Read of block of Q for building of Y failed!\n" );
+			return 1;
+		  }
+
+		  // apply HH vectors to A_i
+		  for ( ii=0; ii<n_Q_l; ii+=nb_alg  ) {
+		   
+		    nb_alg_l = min( nb_alg, n_Q_l - ii );
+
+			dlarft_fc( m_A - k - ii, nb_alg_l,
+					   & buff_Q[ ( k + ii ) + ( ii ) * ldim_Q ], ldim_Q,
+					   & buff_tau[ k + ii ],
+					   buff_T, ldim_T );
+
+			dlarfb_ltfc( m_A_cols - k - ii, n_A_cols_l, nb_alg_l,
+						 & buff_Q[ ( k + ii ) + ( ii ) * ldim_Q ], ldim_Q,
+						 buff_T, ldim_T,
+						 & buff_A_cols[ ( k + ii ) + ( 0 ) * ldim_A_cols ], ldim_A_cols,
+						 buff_work, ldim_work );
+
+		  } // for ii
+
+		} // for k
+
+
+		// compute a block of cols of Y, Y_i = G * A_i
+		dgemm( & n, & n, & m_G, & n_A_cols_l, & n_G,
+			   & d_one,
+			   buff_G, & ldim_G,
+			   & buff_A_cols[ j + ( 0 ) * ldim_A_cols ], & ldim_A_cols,
+			   & d_zero,
+			   & buff_Y[ 0 + ( i - j ) * ldim_Y ], & ldim_Y );
+
+	  } // for i
+	  
+      // Compute QRP of Y.
       QRP_WY( 1, b,
-          m_Y, n_Ycl, buff_Ycl, ldim_Y, buff_p_Yl, buff_tl,
+          m_Y, n_Y_l, buff_Y, ldim_Y, buff_p_Yl, buff_tl,
           1, 1, buff_pl, 1,
-          1, m_Y, buff_Yl, ldim_Y,
+          0, 0, NULL, 0,
           0, NULL, 0 );
 
+	} // if (last_iter == 0)
 
-#ifdef PROFILE
-  t_qr_Y += stop_timer( time1 );
-  time1 = start_timer();
-#endif
-	}
-
-    //
-    // Compute QRP of panel AB1 = [ A11; A21 ].
-    // Apply same permutations to A01 and Y1, and build T1_T.
+    // Update panel [ A12; A22; A32 ]
+    // Compute QRP.
+    // Apply same permutations to A12, and build T1_T.
     //
 
-    if ( last_iter == 0 ) {
-
-	  // read out block of matrix [ A12; A22; A32 ], applying the permutation as we read
-	  for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
-		
-		fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
-		err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ], 
-						   sizeof( double ), m_A_mid, A_fp );			   
-		if ( err_check != m_A_mid ) {
-		  printf( "Error! read of block [A12; A22; A32] failed!\n Number of entries read: %d; number of entries attempted: %d \n", (int) err_check, m_A_mid );
-		  return 1;
-		}
-	  }
-    }
-	else {
-	  fseek( A_fp, ( 0 + ( j ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
-	  err_check = fread( buff_A_mid, sizeof( double ), m_A_mid * n_A_mid, A_fp );			   
-	  if ( err_check != m_A_mid * n_A_mid ) {
-		printf( "Error! read of block [A12; A22; A32] failed!\n Number of entries read: %d; number of entries attempted: %d \n", (int) err_check, m_A_mid * n_A_mid );
-		return 1;
-	  }
-	}
-
-#ifdef PROFILE
-  t_read += stop_timer( time1 );
-  time1 = start_timer();
-#endif
-
-	  // compute QRP; apply permutations to A12 
-	  QRP_WY( panel_pivoting, -1,
-        m_A_mid - j, n_A_mid, & buff_A_mid[ j + 0 * ldim_A_mid ], ldim_A_mid, buff_p_bl, buff_tl,
-        1, 1, buff_pl, 1,
-        1, j, buff_A_mid, ldim_A_mid,
-        1, buff_Wl, ldim_W );
-
-#ifdef PROFILE
-  t_qr_A += stop_timer( time1 );
-  time1 = start_timer();
-#endif
-
-    //
-    // Update the rest of the matrix.
-    //
-
-    if ( ( j + b ) < n_A ) {
-
-	  // read out the old [A12; A22; A32] so we can perform the permutations as we update 
-	  // the rest of the matrix 
-	  fseek( A_fp, ( 0 + ( j ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
-	  err_check = fread( buff_A_mid_old, sizeof( double ), m_A_mid_old * n_A_mid_old, A_fp );		
-	  if ( err_check != m_A_mid_old * n_A_mid_old ) {
-		printf( "Error! read of old block [A12; A22; A32] failed!\n" );
-		return 1;
-	  }
-
-      // Apply the Householder transforms associated with [ A22; A32 ] 
-      // and T1_T to [ A23; A33 ]:
-      //   / A23 \ := QB1' / A23 \
-      //   \ A33 /         \ A33 /
-      // where QB1 is formed from AB1 and T1_T.
-	  //
-	  // also downdate Y3 with
-	  // Y3 = Y3 - (G*Q(:,I2))*A23
-
-      // form auxiliary matrix G*Q(:,I2)
-	  Form_Y_aux( 
-		  b, b, & buff_A_mid[ j + 0 * ldim_A_mid ], ldim_A_mid,
-		  m_A_mid - j - b, n_A_mid, & buff_A_mid[ (j+b) + 0 * ldim_A1112 ], ldim_A_mid,
-		  b, b, buff_Wl, ldim_W,
-		  m_G, b, buff_G1, ldim_G,
-		  m_G, max( 0, n_G - j - b ), buff_G2, ldim_G,
-		  m_Y_updt_aux, n_Y_updt_aux, buff_Y_updt_aux, ldim_Y_updt_aux );
-
-	  // do update
-	  for ( i=j + b; i < n_A; i+=num_cols_read ) {
-
-        n_work = min( num_cols_read, n_A - i );
-
-		// extract one block of cols to update
-		fseek( A_fp, ( 0 + ( i ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
-		err_check = fread( buff_work, sizeof( double ), 
-						   m_work * n_work, A_fp );			
-		if ( err_check != m_work * n_work ) {
-		  printf( "Error! read of block for A update failed!\n" );
-		  return 1;
-		}
-
-#ifdef PROFILE
-  t_read += stop_timer( time1 );
-  time1 = start_timer();
-#endif
-
-		// apply pivots to the block as necessary
-		for ( k=0; k < n_work; k++ ) {
-		  if ( buff_p_Yl[ i + k - j ] != i+k-j ) {
-			dlacpy_( "All", & m_work, & i_one, 
-					 & buff_A_mid_old[ 0 + ( buff_p_Yl[ i + k - j ] ) * ldim_A_mid_old ], 
-					 & ldim_A_mid_old,
-					 & buff_work[ 0 + k * ldim_work ], & ldim_work );
+	  // read out block of matrix [ A12; A22; A32 ]; apply the permutation as we read unless we're on the last iteration 
+	  if ( last_iter == 0 ) {
+		for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
+		  // read out column from original position to be processed
+		  fseek( A_fp, ( j + ( buff_p_Yl[ i ] ) ) * ldim_A * 
+				 sizeof( double ), SEEK_SET );
+		  err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ],
+							 sizeof( double ), m_A, A_fp );
+		  if ( err_check != m_A ) {
+		    printf( "Error! Read of to-be-processed col of A failed!" );
+			return 1;
 		  }
+		  // read out column from original position to be swapped 
+		  fseek( A_fp, ( j + i ) * ldim_A * 
+				 sizeof( double ), SEEK_SET );
+		  err_check = fread( & buff_A_cols[ 0 + i * ldim_A_cols ],
+							 sizeof( double ), m_A, A_fp );
+		  if ( err_check != m_A ) {
+		    printf( "Error! Read of to-be-permuted col of A failed!" );
+			return 1;
+		  }
+		} // for i
+		for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
+		  // find new location for column
+		  int found = 0, new_ind = 0;
+		  while ( found == 0 && new_ind < n_A ) {
+		    if ( buff_p_Yl[ new_ind ] == i ) {
+			  found = 1;
+			} else {
+		      new_ind++;
+			}
+		  }
+		  // write out swapped column to new position for later processing
+		  fseek( A_fp, ( j + new_ind ) * ldim_A * 
+				 sizeof( double ), SEEK_SET );
+		  fwrite( & buff_A_cols[ 0 + i * ldim_A_cols ], sizeof( double ), m_A, A_fp );
+	    } // for i
+	  } else { // just read out last cols of A; nothing needs to be swapped 
+		fseek( A_fp, ( j ) * ldim_A * 
+			   sizeof( double ), SEEK_SET );
+		err_check = fread( buff_A_mid,
+						   sizeof( double ), m_A * b, A_fp );
+		if ( err_check != m_A * b ) {
+		  printf( "Error! Read of to-be-processed block of A failed!" );
+		  return 1;
 		}
 
-#ifdef PROFILE
-  t_apply_pivot += stop_timer( time1 );
-  time1 = start_timer();
-#endif
+	  } // if
 
-		// apply update
-		for ( k=0; k < n_work; k += nb_alg ) {
-		  
-		  int num_cols_updt = min( nb_alg, n_work - k );
+      // update the entire block of cols by applying Q to it
+	  for ( i=0; i < j; i += num_cols_read ) {
 
-		  Apply_Q_WY_lh( m_A_mid - j, n_A_mid, & buff_A_mid[ j + 0 * ldim_A_mid ], ldim_A_mid,
-						  b, b, buff_Wl, ldim_W,
-						  m_work - j, num_cols_updt, & buff_work[ j + k * ldim_work ], ldim_work );
+		n_Q_l = min( num_cols_read, j - i );
 
-#ifdef PROFILE
-  t_update_A += stop_timer( time1 );
-  time1 = start_timer();
-#endif
+		// read out block containing HH vectors
+		fseek( A_fp, ( 0 + ( i ) * ldim_A ) * sizeof( double ), SEEK_SET );	
+		err_check = fread( buff_Q, sizeof( double ), m_Q * n_Q_l, A_fp );
+		if ( err_check != m_Q * n_Q_l ) {
+		  printf( "Error! Read of block of Q for building of Y failed!\n" );
+		  return 1;
+		}
 
-		  // downdate a block of Y
-		  Downdate_Y(
-			b, num_cols_updt, & buff_work[ j + k * ldim_work ], ldim_work,
-			m_Y, num_cols_updt, & buff_Y[ 0  + ( i + k ) * ldim_Y ], ldim_Y,
-			m_Y_updt_aux, n_Y_updt_aux, buff_Y_updt_aux, ldim_Y_updt_aux );
+		// apply HH vectors to A_mid
+		for ( k=0; k<n_Q_l; k+=nb_alg  ) {
+		 
+		  nb_alg_l = min( nb_alg, n_Q_l - k );
 
-        }
+		  dlarft_fc( m_A - i - k, nb_alg_l,
+					 & buff_Q[ ( i + k ) + ( k ) * ldim_Q ], ldim_Q,
+					 & buff_tau[ i + k ],
+					 buff_T, ldim_T );
 
-#ifdef PROFILE
-  t_downdate_Y += stop_timer( time1 );
-  time1 = start_timer();
-#endif
+		  dlarfb_ltfc( m_A_mid - i - k, n_A_mid_l, nb_alg_l,
+					   & buff_Q[ ( i + k ) + ( k ) * ldim_Q ], ldim_Q,
+					   buff_T, ldim_T,
+					   & buff_A_mid[ ( i + k ) + ( 0 ) * ldim_A_mid ], ldim_A_mid,
+					   buff_work, ldim_work );
 
-		// write results back out
-	    fseek( A_fp, 0 + ( i ) * ( ( long long int ) ldim_A  ) * sizeof( double ), SEEK_SET );
-	    fwrite( buff_work, sizeof( double ), m_work * n_work, A_fp );			
+		} // for k
 
-#ifdef PROFILE
-  t_write += stop_timer( time1 );
-  time1 = start_timer();
-#endif
+	  } // for i
 
-	  }
+	  // compute QRP;
+	  QRP_WY( panel_pivoting, -1,
+        m_A_mid - j, n_A_mid_l, 
+		& buff_A_mid[ j + ( 0 ) * ldim_A_mid ], ldim_A_mid, 
+		buff_pl, buff_tl,
+        0, 0, NULL, 0,
+        1, j, buff_A_mid, ldim_A_mid,
+        0, NULL, 0 );
+      
+	  // write out results of above QRP
+	  fseek( A_fp, ( j ) * ldim_A * 
+			 sizeof( double ), SEEK_SET );
+	  fwrite( buff_A_mid, sizeof( double ), m_A_mid * n_A_mid_l, A_fp );
 
-    }
-
-    Downdate_G( 
-		  b, b, & buff_A_mid[ j + 0 * ldim_A_mid ], ldim_A_mid,
-		  m_A_mid - j - b, n_A_mid, & buff_A_mid[ (j+b) + 0 * ldim_A1112 ], ldim_A_mid,
-		  b, b, buff_Wl, ldim_W,
-		  m_G, b, buff_G1, ldim_G,
-		  m_G, max( 0, n_G - j - b ), buff_G2, ldim_G );
-
-#ifdef PROFILE
-  t_downdate_G += stop_timer( time1 );
-  time1 = start_timer();
-#endif
-
-	// write out results to [A12; A22; A32]
-	fseek( A_fp, 0 + ( j ) * ( ( long long int ) ldim_A  ) * sizeof( double ), SEEK_SET );
-	fwrite( buff_A_mid, sizeof( double ), m_A_mid * n_A_mid, A_fp );			
-
-#ifdef PROFILE
-  t_write += stop_timer( time1 );
-#endif
-
-  }
+  } // for j
 
 #ifdef PROFILE
   t_tot += t_read + t_write + t_init_Y + t_qr_Y +
-		   t_qr_A + t_apply_pivot + t_update_A + t_downdate_Y + t_downdate_G;
+			t_qr_A + t_update_A + t_downdate_Y;
 
-  printf( "%% t_comm:          %le    %.2f%%\n", t_read+t_write, (t_read+t_write) / t_tot * 100.0 );
-  printf( "%%   t_read:          %le    %.2f%%\n", t_read, t_read / t_tot * 100.0 );
-  printf( "%%   t_write:         %le    %.2f%%\n", t_write, t_write / t_tot * 100.0 );
-  printf( "%% t_flop:          %le    %.2f%%\n", t_init_Y+t_qr_Y+t_apply_pivot+t_qr_A+t_update_A+t_downdate_Y, (t_init_Y+t_qr_Y+t_qr_A+t_update_A+t_downdate_Y+t_downdate_G) / t_tot * 100.0 );
-  printf( "%%   t_init_Y:        %le    %.2f%%\n", t_init_Y, t_init_Y / t_tot * 100.0 );
-  printf( "%%   t_qr_Y:          %le    %.2f%%\n", t_qr_Y, t_qr_Y / t_tot * 100.0 );
-  printf( "%%   t_apply_pivot:   %le    %.2f%%\n", t_apply_pivot, t_apply_pivot / t_tot * 100.0 );
-  printf( "%%   t_qr_A:          %le    %.2f%%\n", t_qr_A, t_qr_A / t_tot * 100.0 );
-  printf( "%%   t_update_A:      %le    %.2f%%\n", t_update_A, t_update_A / t_tot * 100.0 );
-  printf( "%%   t_downdate_Y:    %le    %.2f%%\n", t_downdate_Y, t_downdate_Y / t_tot * 100.0 );
-  printf( "%%   t_downdate_G:    %le    %.2f%%\n", t_downdate_G, t_downdate_G / t_tot * 100.0 );
+  printf( "%% t_read:          %le    %.2f%%\n", t_read, t_read / t_tot * 100.0 );
+  printf( "%% t_write:         %le    %.2f%%\n", t_write, t_write / t_tot * 100.0 );
+  printf( "%% t_init_Y:        %le    %.2f%%\n", t_init_Y, t_init_Y / t_tot * 100.0 );
+  printf( "%% t_qr_Y:          %le    %.2f%%\n", t_qr_Y, t_qr_Y / t_tot * 100.0 );
+  printf( "%% t_qr_A:          %le    %.2f%%\n", t_qr_A, t_qr_A / t_tot * 100.0 );
+  printf( "%% t_update_A:      %le    %.2f%%\n", t_update_A, t_update_A / t_tot * 100.0 );
+  printf( "%% t_downdate_Y:    %le    %.2f%%\n", t_downdate_Y, t_downdate_Y / t_tot * 100.0 );
   printf( "%% total_time:          %le\n", t_tot );
 #endif
 
@@ -619,13 +607,14 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   free( buff_Y );
   free( buff_Yc );
   free( buff_W );
-  free( buff_A_mid );
-  free( buff_A_mid_old );
-  free( buff_A1112 );
+  free( buff_A1121 );
   free( buff_A21 );
+  free( buff_A_cols );
+  free( buff_A_mid );
   free( buff_work );
+  free( buff_Q );
+  free( buff_T );
   free( buff_p_Y );
-  free( buff_p_bl );
 
   return 0;
 }
@@ -635,20 +624,17 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
 static int Mult_BA_A_out( int m, int n, int k,
 				FILE * A_fp, int ldim_A, double * B_p, int ldim_B,
 				double * C_p, int ldim_C,
-				int bl_size, int num_cols_read,
-				double * t_read, double * t_write, double * t_init_Y ) {
+				int bl_size,
+				double * t_read, double * t_write, double * t_seek ) {
   // Computes C <-- B*A when matrix A is stored out of core,
   // and B and C can be stored in core
   // NOTE: the file position of the stream must be set correctly before entry!
-  // TODO: this function is only called once in the main function and only works
-  //       for that specific instance; change the description, name, and structure
-  //       of this function to reflect that
 
   // bl_size is the number of cols of A that can be stored in RAM at a time
 
   // declare aux vars
   double * A_bl_p; // stores a block of cols of A
-  int num_cols_block, b;
+  int num_cols;
   size_t check;
 
   double d_one = 1.0, d_zero = 0.0;
@@ -660,23 +646,30 @@ static int Mult_BA_A_out( int m, int n, int k,
 #endif
 
   // some initializations
-  A_bl_p = ( double * ) malloc( k * num_cols_read * sizeof( double ) );
+  A_bl_p = ( double * ) malloc( k * bl_size * sizeof( double ) );
 
   // do multiplication one block at a time
-  for ( i=0; i < n; i+= num_cols_read ) {
+  for ( i=0; i < n; i+= bl_size ) {
     
-	num_cols_block = min( num_cols_read, n - i );
+	num_cols = min( bl_size, n - i );
 	
-	// read a block of A into memory
+	// read a block of A into memory, one col at a time
 
 #ifdef PROFILE
   clock_gettime( CLOCK_MONOTONIC, & t1 );
 #endif
+    
+	for ( j=0; j<num_cols; j++ ) {
 	  
-	check = fread( A_bl_p, sizeof( double ), k * num_cols_block, A_fp ); 
-	if ( ( int ) check != k * num_cols_block ) {
-	  printf( "Warning! read failed in Mult_BA_A_out. check = %d \n", (int)check );  
-	  return 1;
+	  check = fread( & A_bl_p[ 0 + j * k ], sizeof( double ), k, A_fp ); 
+	  if ( ( int ) check != k ) {
+	    printf( "Warning! read failed in Mult_BA_A_out. check = %d \n", (int)check );  
+	    return 1;
+	  }
+	
+	  // position file pointer for next iteration
+	  fseek( A_fp, ( ldim_A - k ) * sizeof( double ), SEEK_CUR );
+
 	}
 
 #ifdef PROFILE
@@ -685,31 +678,61 @@ static int Mult_BA_A_out( int m, int n, int k,
   * t_read += ( double ) diff / (1E9);
 #endif
 
-#ifdef PROFILE
-  clock_gettime( CLOCK_MONOTONIC, & t1 );
-#endif
-
-    for ( j=0; j < num_cols_block; j+= bl_size ) {
-
-      b = min( bl_size, num_cols_block - j );
-
-	  // do multiplication; gives one block of cols of C
-	  dgemm( "No transpose", "No tranpose", 
-			  & m, & b, & k,
-			  & d_one, B_p, & ldim_B, & A_bl_p[ 0 + j * k ], & k,
-			  & d_zero, & C_p[ 0 + ( i + j ) * ldim_C ], & ldim_C );
-    }
-
-#ifdef PROFILE
-  clock_gettime( CLOCK_MONOTONIC, & t2 );
-  diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
-  * t_init_Y += ( double ) diff / (1E9);
-#endif
-
+	// do multiplication; gives one block of cols of C
+	dgemm( "No transpose", "No tranpose", 
+			& m, & num_cols, & k,
+			& d_one, B_p, & ldim_B, A_bl_p, & k,
+			& d_zero, & C_p[ 0 + i * ldim_C ], & ldim_C );
+  
   }
 
   // free memory
   free( A_bl_p );
+
+  return 0;
+
+}
+
+// ============================================================================
+static int dlarft_fc( int n, int k, double * buff_V, int ldim_V,
+					  double * buff_tau,
+					  double * buff_T, int ldim_T ) {
+// performs the same function as the LAPACK dlarft, with parameters
+// direct = "F",
+// storev = "C"
+  
+  char f = 'F', c = 'C';
+
+  dlarft( & f, & c,
+		  & n, & k, 
+		  buff_V, & ldim_V,
+		  buff_tau,
+		  buff_T, & ldim_T );
+  
+  return 0;
+
+}
+// ============================================================================
+static int dlarfb_ltfc( int m_A, int n_A, int k,
+						double * buff_V, int ldim_V,
+						double * buff_T, int ldim_T,
+						double * buff_A, int ldim_A,
+						double * buff_work, int ldim_work ) {
+// carries out the lapack function dlarfb, with parameters
+// side = "L",
+// trans = "T",
+// direct = "F",
+// storev = "C"
+
+  char l = 'L', t = 'T', f = 'F', c = 'C';
+
+  dlarfb( & l, & t, & f, & c,
+		  & m_A, & n_A, & k, 
+		  buff_V, & ldim_V, buff_T, & ldim_T,
+		  buff_A, & ldim_A,
+		  buff_work, & ldim_work );
+
+  return 0;
 
 }
 
@@ -757,102 +780,82 @@ static double NoFLA_Normal_random_number( double mu, double sigma ) {
 
 // ============================================================================
 static int Downdate_Y( 
+               int m_U11, int n_U11, double * buff_U11, int ldim_U11,
+               int m_U21, int n_U21, double * buff_U21, int ldim_U21,
                int m_A12, int n_A12, double * buff_A12, int ldim_A12,
+               int m_T, int n_T, double * buff_T, int ldim_T,
                int m_Y2, int n_Y2, double * buff_Y2, int ldim_Y2,
-			   int m_Y_aux, int n_Y_aux, double * buff_Y_aux, int ldim_Y_aux) {
+               int m_G1, int n_G1, double * buff_G1, int ldim_G1,
+               int m_G2, int n_G2, double * buff_G2, int ldim_G2 ) {
 //
-// It downdates matrix Y.
+// It downdates matrix Y, and updates matrix G.
 // Only Y2 of Y is updated.
+// Only G1 and G2 of G are updated.
 //
 // Y2 = Y2 - ( G1 - ( G1*U11 + G2*U21 ) * T11 * U11' ) * R12.
-//    = Y2 - Y_updt_aux * R12
 //
   int    i, j;
+  double * buff_B;
   double d_one       = 1.0;
   double d_minus_one = -1.0;
+  int    m_B         = m_G1;
+  int    n_B         = n_G1;
+  int    ldim_B      = m_G1;
+
+  // Create object B.
+  //// FLA_Obj_create_conf_to( FLA_NO_TRANSPOSE, G1, & B );
+  buff_B = ( double * ) malloc( m_B * n_B * sizeof( double ) );
+
+  // B = G1.
+  //// FLA_Copy( G1, B );
+  dlacpy_( "All", & m_G1, & n_G1, buff_G1, & ldim_G1,
+                                  buff_B, & ldim_B );
+
+  // B = B * U11.
+  //// FLA_Trmm( FLA_RIGHT, FLA_LOWER_TRIANGULAR,
+  ////           FLA_NO_TRANSPOSE, FLA_UNIT_DIAG,
+  ////           FLA_ONE, U11, B );
+  dtrmm( "Right", "Lower", "No transpose", "Unit", & m_B, & n_B,
+          & d_one, buff_U11, & ldim_U11, buff_B, & ldim_B );
+
+  // B = B + G2 * U21.
+  //// FLA_Gemm( FLA_NO_TRANSPOSE, FLA_NO_TRANSPOSE,
+  ////           FLA_ONE, G2, U21, FLA_ONE, B );
+  dgemm( "No transpose", "No tranpose", & m_B, & n_B, & m_U21,
+          & d_one, buff_G2, & ldim_G2, buff_U21, & ldim_U21,
+          & d_one, buff_B, & ldim_B );
+
+  // B = B * T11.
+  //// FLA_Trsm( FLA_RIGHT, FLA_UPPER_TRIANGULAR,
+  ////           FLA_NO_TRANSPOSE, FLA_NONUNIT_DIAG,
+  ////           FLA_ONE, T, B );
+  //// dtrsm_( "Right", "Upper", "No transpose", "Non-unit", & m_B, & n_B,
+  ////         & d_one, buff_T, & ldim_T, buff_B, & ldim_B );
+  // Used dtrmm instead of dtrsm because of using compact WY instead of UT.
+  dtrmm( "Right", "Upper", "No transpose", "Non-unit", & m_B, & n_B,
+          & d_one, buff_T, & ldim_T, buff_B, & ldim_B );
+
+  // B = - B * U11^H.
+  //// FLA_Trmm( FLA_RIGHT, FLA_LOWER_TRIANGULAR,
+  ////           FLA_CONJ_TRANSPOSE, FLA_UNIT_DIAG,
+  ////           FLA_MINUS_ONE, U11, B );
+  dtrmm( "Right", "Lower", "Conj_tranpose", "Unit", & m_B, & n_B,
+          & d_minus_one, buff_U11, & ldim_U11, buff_B, & ldim_B );
+
+  // B = G1 + B.
+  //// FLA_Axpy( FLA_ONE, G1, B );
+  for( j = 0; j < n_B; j++ ) {
+    for( i = 0; i < m_B; i++ ) {
+      buff_B[ i + j * ldim_B ] += buff_G1[ i + j * ldim_G1 ];
+    }
+  }
 
   // Y2 = Y2 - B * R12.
   //// FLA_Gemm( FLA_NO_TRANSPOSE, FLA_NO_TRANSPOSE,
   ////           FLA_MINUS_ONE, B, A12, FLA_ONE, Y2 );
   dgemm( "No transpose", "No transpose", & m_Y2, & n_Y2, & m_A12,
-          & d_minus_one, buff_Y_aux, & ldim_Y_aux, buff_A12, & ldim_A12,
+          & d_minus_one, buff_B, & ldim_B, buff_A12, & ldim_A12,
           & d_one, buff_Y2, & ldim_Y2 );
-
-  return 0;
-}
-
-// ============================================================================
-static int Form_Y_aux( 
-               int m_U11, int n_U11, double * buff_U11, int ldim_U11,
-               int m_U21, int n_U21, double * buff_U21, int ldim_U21,
-               int m_T, int n_T, double * buff_T, int ldim_T,
-               int m_G1, int n_G1, double * buff_G1, int ldim_G1,
-               int m_G2, int n_G2, double * buff_G2, int ldim_G2,
-			   int m_Y_aux, int n_Y_aux, double * buff_Y_aux, int ldim_Y_aux ) {
-//
-// It forms the auxiliary matrix in the Y downdate:
-// Y_aux = ( G1 - ( G1 * U11 + G2 * U21 ) * T11 * U11' )
-//
-  int    i, j;
-  double d_one       = 1.0;
-  double d_minus_one = -1.0;
-
-  // Y_aux = G1.
-  //// FLA_Copy( G1, Y_aux );
-  dlacpy_( "All", & m_G1, & n_G1, buff_G1, & ldim_G1,
-                                  buff_Y_aux, & ldim_Y_aux );
-
-  // Y_aux = Y_aux * U11.
-  //// FLA_Trmm( FLA_RIGHT, FLA_LOWER_TRIANGULAR,
-  ////           FLA_NO_TRANSPOSE, FLA_UNIT_DIAG,
-  ////           FLA_ONE, U11, Y_aux );
-  dtrmm( "Right", "Lower", "No transpose", "Unit", & m_Y_aux, & n_Y_aux,
-          & d_one, buff_U11, & ldim_U11, buff_Y_aux, & ldim_Y_aux );
-
-  // Y_aux = Y_aux + G2 * U21.
-  //// FLA_Gemm( FLA_NO_TRANSPOSE, FLA_NO_TRANSPOSE,
-  ////           FLA_ONE, G2, U21, FLA_ONE, Y_aux );
-  dgemm( "No transpose", "No tranpose", & m_Y_aux, & n_Y_aux, & m_U21,
-          & d_one, buff_G2, & ldim_G2, buff_U21, & ldim_U21,
-          & d_one, buff_Y_aux, & ldim_Y_aux );
-
-  // Y_aux = Y_aux * T11.
-  //// FLA_Trsm( FLA_RIGHT, FLA_UPPER_TRIANGULAR,
-  ////           FLA_NO_TRANSPOSE, FLA_NONUNIT_DIAG,
-  ////           FLA_ONE, T, Y_aux );
-  //// dtrsm_( "Right", "Upper", "No transpose", "Non-unit", & m_Y_aux, & n_Y_aux,
-  ////         & d_one, buff_T, & ldim_T, buff_Y_aux, & ldim_Y_aux );
-  // Used dtrmm instead of dtrsm because of using compact WY instead of UT.
-  dtrmm( "Right", "Upper", "No transpose", "Non-unit", & m_Y_aux, & n_Y_aux,
-          & d_one, buff_T, & ldim_T, buff_Y_aux, & ldim_Y_aux );
-
-  // Y_aux = - Y_aux * U11^H.
-  //// FLA_Trmm( FLA_RIGHT, FLA_LOWER_TRIANGULAR,
-  ////           FLA_CONJ_TRANSPOSE, FLA_UNIT_DIAG,
-  ////           FLA_MINUS_ONE, U11, Y_aux );
-  dtrmm( "Right", "Lower", "Conj_tranpose", "Unit", & m_Y_aux, & n_Y_aux,
-          & d_minus_one, buff_U11, & ldim_U11, buff_Y_aux, & ldim_Y_aux );
-
-  // Y_aux = G1 + Y_aux.
-  //// FLA_Axpy( FLA_ONE, G1, Y_aux );
-  for( j = 0; j < n_Y_aux; j++ ) {
-    for( i = 0; i < m_Y_aux; i++ ) {
-      buff_Y_aux[ i + j * ldim_Y_aux ] += buff_G1[ i + j * ldim_G1 ];
-    }
-  }
-
-  return 0;
-}
-
-// ============================================================================
-static int Downdate_G( 
-               int m_U11, int n_U11, double * buff_U11, int ldim_U11,
-               int m_U21, int n_U21, double * buff_U21, int ldim_U21,
-               int m_T, int n_T, double * buff_T, int ldim_T,
-               int m_G1, int n_G1, double * buff_G1, int ldim_G1,
-               int m_G2, int n_G2, double * buff_G2, int ldim_G2 ) {
-  // Updates matrix G
-  // Only G1 and G2 of G are updated.
 
   //
   // GR = GR * Q
@@ -862,8 +865,13 @@ static int Downdate_G(
           m_T, n_T, buff_T, ldim_T,
           m_G1, n_G1 + n_G2, buff_G1, ldim_G1 );
 
+  // Remove object B.
+  //// FLA_Obj_free( & B );
+  free( buff_B );
+
   return 0;
 }
+
 // ============================================================================
 static int Apply_Q_WY_lh( 
                int m_U, int n_U, double * buff_U, int ldim_U,
@@ -1143,16 +1151,6 @@ static int NoFLA_QRP_downdate_partial_norms( int m_A, int n_A,
 }
 
 // ============================================================================
-static int Apply_pivot_ooc( int m_A, int n_A, FILE * A_fp, int ldim_A,
-				int * buff_p ) {
-  // applies a permutation vector to the matrix stored in the file
-  // pointed to by A_fp
-
-
-
-}
-
-// ============================================================================
 static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
                int m_G, double * buff_G, int ldim_G, 
                int pivot_B, int m_B, int * buff_B, int ldim_B, 
@@ -1161,12 +1159,11 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
                double * buff_d, double * buff_e ) {
 //
 // It pivots matrix G, pivot vector p, and norms vectors d and e.
-// pivot vector B and matrix C are optionally pivoted.
+// Matrices B and C are optionally pivoted.
 //
   int     ival, i_one = 1;
   double  * ptr_g1, * ptr_g2, * ptr_c1, * ptr_c2;
-  int * ptr_b1, * ptr_b2;
-  int btemp;
+  int     btemp;
 
   // Swap columns of G, pivots, and norms.
   if( j_max_col != 0 ) {
@@ -1179,7 +1176,7 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
     // Swap full column 0 and column "j_max_col" of B.
     if( pivot_B ) {
 	  btemp = buff_B[ 0 + 0 * ldim_B ]; 
-	  buff_B[ 0 + 0 * ldim_B ] = buff_B[ 0 + j_max_col * ldim_B ];
+      buff_B[ 0 + 0 * ldim_B ] = buff_B[ 0 + j_max_col * ldim_B ];
 	  buff_B[ 0 + j_max_col * ldim_B ] = btemp;
     }
 
@@ -1203,46 +1200,3 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
   return 0;
 }
 
-// ======================================================================== 
-static struct timespec start_timer( void ) { 
-  // this function returns a timespec object that contains
-  // clock information at the time of this function's execution
-  //
-  // performs the same function as MATLAB's 'tic'
- 
-  // declare variables
-  struct timespec t1;
-
-  // get current clock info
-  clock_gettime( CLOCK_MONOTONIC, & t1 );
-
-  return t1;
-
-}
-	
-// ======================================================================== 
-static double stop_timer( struct timespec t1 ) {
-  // this function returns a variable of type double that
-  // corresponds to the number of seconds that have elapsed
-  // since the time that t1 was generated by start_timer
-  // 
-  // performs the same function as MATLAB's 'toc'
-  //
-  // t1: the output of start_timer; holds clock information
-  //     from a function call to start_timer
-  
-  // declare variables 
-  struct timespec  t2;
-  uint64_t  t_elapsed_nsec;
-  double    t_elapsed_sec;
-
-  // get current clock info
-  clock_gettime(CLOCK_MONOTONIC, & t2);
-
-  // calculate elapsed time
-  t_elapsed_nsec = (1000000000L) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
-  t_elapsed_sec = (double) t_elapsed_nsec / (1000000000L);
-
-  return t_elapsed_sec;
-
-}

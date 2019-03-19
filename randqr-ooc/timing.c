@@ -47,8 +47,9 @@ int main() {
 
   int bl_size = 250;
   int k = 1000;
+  int num_cols_read = 1000;
   int p = 0;
-  int n_A[] = {1000,2000,4000,10000,20000};//{1000, 2000, 4000, 5000, 8000, 10000, 15000, 20000, 30000, 40000, 45000, 50000, 70000, 100000, 110000, 120000, 150000};
+  int n_A[] = {150000};//{1000, 2000, 4000, 5000, 8000, 10000, 15000, 20000, 30000, 40000, 45000, 50000, 70000, 100000, 110000, 120000, 150000};
 
 
   // for timing
@@ -100,9 +101,9 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do SSD factorization
-		hqrrp_ooc( dir_name_ssd, sizeof( dir_name_ssd ), A_fname_ssd, sizeof( dir_name_ssd ),
+		hqrrp_ooc( dir_name_ssd, sizeof( dir_name_ssd ), A_fname_ssd, sizeof( A_fname_ssd ),
 					n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-					bl_size, n_A[i], p, 1 );
+					bl_size, k, p, 1, num_cols_read );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -115,7 +116,7 @@ int main() {
 		// do HDD factorization
 		hqrrp_ooc( dir_name_hdd, sizeof( dir_name_hdd ), A_fname_hdd, sizeof( A_fname_hdd ),
 					n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
-		  			bl_size, n_A[i], p, 1 );
+		  			bl_size, k, p, 1, num_cols_read );
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );
@@ -128,7 +129,7 @@ int main() {
 		// do in-core factorization
 		if ( n_A[ i ] <= 45000 ) {
 		  NoFLA_HQRRP_WY_blk_var4( n_A[i], n_A[i], buff_A, n_A[i], buff_p, buff_tau,
-		   			bl_size, n_A[i], p, 1 );
+		   			bl_size, k, p, 1 );
 		}
 
 		// stop timing and record time
@@ -150,12 +151,12 @@ int main() {
   }
 
   // write results to file
-  ofp = fopen( "cpqr_ooc_times.m", & mode );
+  ofp = fopen( "cpqr_ooc_partial_times.m", & mode );
 
-  fprintf( ofp, "%% block size was %d \n \n %% physical pivoting was used \n", bl_size );
+  fprintf( ofp, "%% block size was %d \n \n %% left looking algorithm was used; k = %d \n", bl_size, k );
 
 	// write out vector of values of n used for these tests
-	fprintf( ofp, "n_cpqr_ooc = [ \n" );
+	fprintf( ofp, "n_cpqr_ooc_left = [ \n" );
 
 	for ( i=0; i < sizeof( n_A ) / sizeof( int ); i++ ) {
 	  fprintf( ofp,  "%d ", n_A[ i ] );
@@ -165,7 +166,7 @@ int main() {
 
     // write out vector of times for SSD computation
 	
-	fprintf( ofp, "t_cpqr_ssd = [ \n" );
+	fprintf( ofp, "t_cpqr_ssd_left = [ \n" );
 
 	for ( i=0; i < (sizeof(n_A) / sizeof(int)); i++ ) {
 	  fprintf( ofp,  "%.2e ", t_cpqr_ssd[ i ] );
@@ -175,7 +176,7 @@ int main() {
     
 	// write out vector of times for HDD computation
 
-	fprintf( ofp, "t_cpqr_hdd = [ \n" );
+	fprintf( ofp, "t_cpqr_hdd_left = [ \n" );
 
 	for ( i=0; i < (sizeof(n_A) / sizeof(int)); i++ ) {
 	  fprintf( ofp,  "%.2e ", t_cpqr_hdd[ i ] );
@@ -185,7 +186,7 @@ int main() {
 	
 	// write out vector of times for in core computation
 
-	fprintf( ofp, "t_cpqr_in = [ \n" );
+	fprintf( ofp, "t_cpqr_in_left = [ \n" );
 
 	for ( i=0; i < (sizeof(n_A) / sizeof(int)); i++ ) {
 	  fprintf( ofp,  "%.2e ", t_cpqr_in[ i ] );
