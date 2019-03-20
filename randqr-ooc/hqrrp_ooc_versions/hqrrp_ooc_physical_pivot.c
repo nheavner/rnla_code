@@ -47,6 +47,7 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <stdint.h>
 #include <math.h>
 #include <time.h>
+#include <string.h>
 
 #include "hqrrp_ooc.h"
 #include <mkl.h>
@@ -173,9 +174,12 @@ static struct timespec start_timer( void );
 static double stop_timer( struct timespec t1 );
 
 // ============================================================================
-int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
+int hqrrp_ooc( char * dir_name, size_t dir_name_size,
+		char * A_fname, size_t A_fname_size, 
+		int m_A, int n_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-        int nb_alg, int kk, int pp, int panel_pivoting ) {
+        int nb_alg, int kk, int pp, int panel_pivoting,
+		int num_cols_read ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
 // This routine is almost compatible with LAPACK's dgeqp3.
@@ -247,7 +251,11 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   int     i_one = 1;
   FILE    * A_fp;
   size_t err_check;
-  int num_cols_read = 5000; // TODO: make this value smarter
+
+  char file_path[ dir_name_size / sizeof( dir_name[0] ) +
+				  A_fname_size / sizeof( A_fname[0] )];
+  strcpy( file_path, dir_name );
+  strcat( file_path, A_fname );
 
 #ifdef PROFILE
  struct timespec time1;
@@ -279,7 +287,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   buff_p = buff_jpvt;
   buff_t = buff_tau;
 
-  A_fp = fopen( A_fname, "r+" );
+  A_fp = fopen( file_path, "r+" );
 
   // Quick return.
   if( mn_A == 0 ) {
@@ -435,7 +443,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
 		  printf( "Error! read of block [A12; A22; A32] failed!\n Number of entries read: %d; number of entries attempted: %d \n", (int) err_check, m_A_mid );
 		  return 1;
 		}
-	  }
+	  } // for i
     }
 	else {
 	  fseek( A_fp, ( 0 + ( j ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );

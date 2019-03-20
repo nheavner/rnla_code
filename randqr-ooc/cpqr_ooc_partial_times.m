@@ -35,3 +35,63 @@ t_cpqr_ssd_left = [
 t_cpqr_hdd_left = [ 
 1.37e-01 4.91e+00 1.59e+01 5.66e+01 9.79e+01 1.49e+02 5.51e+02 1.13e+03 1.59e+03 2.55e+03 ]; 
  
+% block size was 250 
+ 
+ % physical pivoting was used; k = 1000 
+n_cpqr_ooc_pp = [ 
+50000 ]; 
+ 
+t_cpqr_ssd_pp = [ 
+1.04e+02 ]; 
+ 
+t_cpqr_hdd_pp = [ 
+3.81e+02 ]; 
+ 
+t_cpqr_in_pp = [ 
+3.60e-08 ]; 
+ 
+% block size was 250 
+ 
+ % physical pivoting was used; k = 1000 
+n_cpqr_ooc_pp = [ 
+70000 ]; 
+ 
+t_cpqr_ssd_pp = [ 
+3.23e+01 ]; 
+ 
+t_cpqr_hdd_pp = [ 
+2.23e+02 ]; 
+ 
+t_cpqr_in_pp = [ 
+2.50e-08 ]; 
+ 
+% block size was 250 
+ 
+ % physical pivoting was used; k = 1000 
+n_cpqr_ooc_pp = [ 
+70000 ]; 
+ 
+t_cpqr_ssd_pp = [ 
+3.44e+01 ]; 
+ 
+t_cpqr_hdd_pp = [ 
+2.70e+02 ]; 
+ 
+t_cpqr_in_pp = [ 
+2.30e-08 ]; 
+ 
+% block size was 250 
+ 
+ % physical pivoting was used; k = 1000 
+n_cpqr_ooc_pp = [ 
+70000 ]; 
+ 
+t_cpqr_ssd_pp = [ 
+3.17e+01 ]; 
+ 
+t_cpqr_hdd_pp = [ 
+2.90e-08 ]; 
+ 
+t_cpqr_in_pp = [ 
+2.80e-08 ]; 
+ 
