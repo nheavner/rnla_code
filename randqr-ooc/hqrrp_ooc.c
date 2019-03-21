@@ -408,7 +408,7 @@ int hqrrp_ooc( char * dir_name, size_t dir_name_size,
 
   // Main Loop.
   for( j = 0; j < kk; j += nb_alg ) {
-    printf("j = %d \n", j);
+
     b = min( nb_alg, min( n_A - j, m_A - j ) );
 
     // Check whether it is the last iteration.
@@ -480,11 +480,13 @@ int hqrrp_ooc( char * dir_name, size_t dir_name_size,
 
 	  // read out block of matrix [ A12; A22; A32 ], applying the permutation as we read
 	  for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
-	    if ( j == 0 ) {
-		  print_int_matrix( "buff_p_Yl", m_A, 1, buff_p_Yl, m_A );
-		}
-		
-		fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
+	    // TODO: figure out why we need long long int here but the left-
+		//       looking algorithm doesn't
+		int check = fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ( long long int ) ldim_A ) * sizeof( double ), SEEK_SET );
+		  if ( check != 0 ) {
+		    printf( "Error! fseek failed! \n" );
+			return 1;
+		  }
 		err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ], 
 						   sizeof( double ), m_A_mid, A_fp );			   
 		if ( err_check != m_A_mid ) {

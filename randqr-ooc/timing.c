@@ -49,7 +49,7 @@ int main() {
   int k = 1000;
   int num_cols_read = 250;//1000;
   int p = 0;
-  int n_A[] = {70000};//{1000, 8000, 15000, 30000, 40000, 50000, 70000, 100000, 120000, 150000};
+  int n_A[] = {150000};//{1000, 8000, 15000, 30000, 40000, 50000, 70000, 100000, 120000, 150000};
 
 
   // for timing
@@ -114,11 +114,9 @@ int main() {
 		clock_gettime(CLOCK_MONOTONIC, & t1 );
 		
 		// do HDD factorization
-		/*
 		hqrrp_ooc( dir_name_hdd, sizeof( dir_name_hdd ), A_fname_hdd, sizeof( A_fname_hdd ),
 					n_A[i], n_A[i], n_A[i], buff_p, buff_tau,
 		  			bl_size, k, p, 1, num_cols_read );
-		*/
 
 		// stop timing and record time
 		clock_gettime( CLOCK_MONOTONIC, & t2 );

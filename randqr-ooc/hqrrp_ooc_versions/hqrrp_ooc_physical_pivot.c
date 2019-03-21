@@ -301,38 +301,66 @@ int hqrrp_ooc( char * dir_name, size_t dir_name_size,
   m_Y     = nb_alg + pp;
   n_Y     = n_A;
   buff_Y  = ( double * ) malloc( m_Y * n_Y * sizeof( double ) );
+    if ( buff_Y == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   buff_Yc  = ( double * ) malloc( m_Y * n_Y * sizeof( double ) );
+    if ( buff_Yc == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_Y  = m_Y;
 
   m_Y_updt_aux = nb_alg;
   n_Y_updt_aux = nb_alg;
   buff_Y_updt_aux = ( double * ) malloc( m_Y_updt_aux * n_Y_updt_aux * sizeof( double ) );
+    if ( buff_Y_updt_aux == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_Y_updt_aux = m_Y_updt_aux;
 
   m_W     = nb_alg;
   n_W     = n_A;
   buff_W  = ( double * ) malloc( m_W * n_W * sizeof( double ) );
+    if ( buff_W == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_W  = m_W;
 
   m_G     = nb_alg + pp;
   n_G     = m_A;
   buff_G  = ( double * ) malloc( m_G * n_G * sizeof( double ) );
+    if ( buff_G == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_G  = m_G;
   
   m_A_mid    = m_A;
   n_A_mid    = nb_alg;
   buff_A_mid = ( double * ) malloc( m_A_mid * n_A_mid * sizeof( double ) );
+    if ( buff_A_mid == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_A_mid = m_A_mid;
 
   m_A_mid_old    = m_A;
   n_A_mid_old    = nb_alg;
   buff_A_mid_old = ( double * ) malloc( m_A_mid_old * n_A_mid_old * sizeof( double ) );
+    if ( buff_A_mid_old == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_A_mid_old = m_A_mid_old;
   
   m_A1112    = m_A;
   n_A1112    = nb_alg;
   buff_A1112 = ( double * ) malloc( m_A1112 * n_A1112 * sizeof( double ) );
-  if ( !buff_A1112 ) {
+  if ( buff_A1112 == NULL ) {
     printf("Error! Memory allocation for A1112 failed \n");
 	return -1;
   }
@@ -341,15 +369,31 @@ int hqrrp_ooc( char * dir_name, size_t dir_name_size,
   m_A21    = nb_alg;
   n_A21    = n_A;
   buff_A21 = ( double * ) malloc( m_A21 * n_A21 * sizeof( double ) );
+    if ( buff_A21 == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_A21 =  nb_alg;
   
   m_work    = m_A;
   n_work    = num_cols_read;
   buff_work = ( double * ) malloc( m_work * n_work * sizeof( double ) ); 
+    if ( buff_work == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   ldim_work = m_A;
 
   buff_p_Y  = ( int * ) malloc( m_A * sizeof( int ) ); 
+    if ( buff_p_Y == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
   buff_p_bl  = ( int * ) malloc( nb_alg * sizeof( int ) ); 
+    if ( buff_p_bl == NULL ) {
+	  printf("Error! Memory allocation failed! \n");
+	  return 1;
+	}
 
   // Initialize matrices G and Y.
   NoFLA_Normal_random_matrix( nb_alg + pp, m_A, buff_G, ldim_G );
@@ -364,6 +408,7 @@ int hqrrp_ooc( char * dir_name, size_t dir_name_size,
 
   // Main Loop.
   for( j = 0; j < kk; j += nb_alg ) {
+    printf("j = %d \n", j);
     b = min( nb_alg, min( n_A - j, m_A - j ) );
 
     // Check whether it is the last iteration.
@@ -435,15 +480,22 @@ int hqrrp_ooc( char * dir_name, size_t dir_name_size,
 
 	  // read out block of matrix [ A12; A22; A32 ], applying the permutation as we read
 	  for ( i=0; i < min( nb_alg, n_A - j ); i++ ) {
+	    if ( j == 0 ) {
+		  print_int_matrix( "buff_p_Yl", m_A, 1, buff_p_Yl, m_A );
+		}
 		
-		fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
+		int check = fseek( A_fp, ( 0 + ( j + buff_p_Yl[ i ] ) * ldim_A ) * sizeof( double ), SEEK_SET );
+		  if ( check != 0 ) {
+		    printf( "Error! fseek failed! \n" );
+			return 1;
+		  }
 		err_check = fread( & buff_A_mid[ 0 + i * ldim_A_mid ], 
 						   sizeof( double ), m_A_mid, A_fp );			   
 		if ( err_check != m_A_mid ) {
 		  printf( "Error! read of block [A12; A22; A32] failed!\n Number of entries read: %d; number of entries attempted: %d \n", (int) err_check, m_A_mid );
 		  return 1;
 		}
-	  } // for i
+	  }
     }
 	else {
 	  fseek( A_fp, ( 0 + ( j ) * ( ( long long int ) ldim_A ) ) * sizeof( double ), SEEK_SET );
@@ -625,6 +677,7 @@ int hqrrp_ooc( char * dir_name, size_t dir_name_size,
   free( buff_G );
   free( buff_Y );
   free( buff_Yc );
+  free( buff_Y_updt_aux );
   free( buff_W );
   free( buff_A_mid );
   free( buff_A_mid_old );
