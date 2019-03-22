@@ -34,3 +34,14 @@ t_cpqr_ssd_left = [
  
 t_cpqr_hdd_left = [ 
 1.37e-01 4.91e+00 1.59e+01 5.66e+01 9.79e+01 1.49e+02 5.51e+02 1.13e+03 1.59e+03 2.55e+03 ]; 
+% block size was 250 
+ 
+ % physical pivoting was used; k = 1000 
+n_cpqr_ooc_pp = [ 
+150000 ]; 
+ 
+t_cpqr_ssd_pp = [ 
+1.88e+03 ]; 
+ 
+t_cpqr_hdd_pp = [ 
+1.04e+04 ]; 
