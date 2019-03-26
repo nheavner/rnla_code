@@ -54,8 +54,8 @@ ax = gca;
 set(ax,'fontsize',16);
 set(p3,'LineWidth',2,'MarkerSize',10);
 xlabel('n');
-ylabel('Time [s] / n^3');
-title('CPU computations');
+ylabel('Time_{cpu} / Time_{gpu}');
+title('Acceleration factors');
 legend(	'dgesdd (SVD)',...
 		'dgeqp3 (CPQR)',...
 		'rand\_utv, q=2',...
