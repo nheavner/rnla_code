@@ -1,12 +1,18 @@
 clear
 
+% choose which dataset to use
+k = 500
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%% read in data %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-cpqr_ooc_partial_times_k1000
+if k == 500
+	cpqr_ooc_partial_times_k500;
+else
+	cpqr_ooc_partial_times_k1000;
+end
 
 
 %%%%%%%%%% generate line vals for predicted ssd performance  %%%%%%%%%%%
 % NOTE: This function will change depending on k,b
-k = 1000;
 b = 250;
 mat_size = n_cpqr_ooc.^2*8/(1e+09);
 t_cpqr_ssd_predicted_comm =  ( 2*mat_size + b./n_cpqr_ooc.*mat_size ) ./ 4.4 + ... % read  
@@ -29,7 +35,11 @@ set(ax,'fontsize',16);
 set(p1,'LineWidth',2,'MarkerSize',10);
 xlabel('n');
 ylabel('Time [s] / n^2');
-title('Partial Factorization Times, k=1000, b=250')
+if k == 500
+	title('Partial Factorization Times, k=500, b=250')
+else
+	title('Partial Factorization Times, k=1000, b=250')
+end
 legend(	'In Core',...
 		'In place, SSD',...
 		'In place, HDD',...
