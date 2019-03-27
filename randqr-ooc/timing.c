@@ -46,10 +46,10 @@ int main() {
   int i, j;
 
   int bl_size = 250;
-  int k = 1000;
+  int k = 500;
   int num_cols_read = 250;//1000;
   int p = 0;
-  int n_A[] = {150000};//{1000, 8000, 15000, 30000, 40000, 50000, 70000, 100000, 120000, 150000};
+  int n_A[] = {1000, 8000, 15000, 30000, 40000, 50000, 70000, 100000, 120000, 150000};
 
 
   // for timing
@@ -151,12 +151,12 @@ int main() {
   }
 
   // write results to file
-  ofp = fopen( "cpqr_ooc_partial_times.m", & mode );
+  ofp = fopen( "cpqr_ooc_partial_times_k500.m", & mode );
 
-  fprintf( ofp, "%% block size was %d \n \n %% physical pivoting was used; k = %d \n", bl_size, k );
+  fprintf( ofp, "%% block size was %d \n \n %% left lookking algorithm was used; k = %d \n", bl_size, k );
 
 	// write out vector of values of n used for these tests
-	fprintf( ofp, "n_cpqr_ooc_pp = [ \n" );
+	fprintf( ofp, "n_cpqr_ooc_left = [ \n" );
 
 	for ( i=0; i < sizeof( n_A ) / sizeof( int ); i++ ) {
 	  fprintf( ofp,  "%d ", n_A[ i ] );
@@ -166,7 +166,7 @@ int main() {
 
     // write out vector of times for SSD computation
 	
-	fprintf( ofp, "t_cpqr_ssd_pp = [ \n" );
+	fprintf( ofp, "t_cpqr_ssd_left = [ \n" );
 
 	for ( i=0; i < (sizeof(n_A) / sizeof(int)); i++ ) {
 	  fprintf( ofp,  "%.2e ", t_cpqr_ssd[ i ] );
@@ -176,7 +176,7 @@ int main() {
     
 	// write out vector of times for HDD computation
 
-	fprintf( ofp, "t_cpqr_hdd_pp = [ \n" );
+	fprintf( ofp, "t_cpqr_hdd_left = [ \n" );
 
 	for ( i=0; i < (sizeof(n_A) / sizeof(int)); i++ ) {
 	  fprintf( ofp,  "%.2e ", t_cpqr_hdd[ i ] );
@@ -186,7 +186,7 @@ int main() {
 	
 	// write out vector of times for in core computation
 
-	fprintf( ofp, "t_cpqr_in_pp = [ \n" );
+	fprintf( ofp, "t_cpqr_in = [ \n" );
 
 	for ( i=0; i < (sizeof(n_A) / sizeof(int)); i++ ) {
 	  fprintf( ofp,  "%.2e ", t_cpqr_in[ i ] );

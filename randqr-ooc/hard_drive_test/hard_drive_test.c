@@ -28,12 +28,13 @@ int main( int argc, char *argv[] ) {
   double t_total = 0.0;
 
   // Create matrix A, vector p, vector s, and matrix Q.
-  m_A      = 45000;
-  n_A      = 45000;
+  m_A      = 100000;
+  n_A      = 100000;
+  int num_cols_read = 1000;
  
   clock_gettime( CLOCK_MONOTONIC, & t_start );
 
-  A_p = ( double * ) malloc( m_A * n_A * sizeof( double ) );
+  A_p = ( double * ) malloc( m_A * num_cols_read * sizeof( double ) );
 
   // Generate binary file which stores the matrix (out of core)
   matrix_generate_ooc( m_A, n_A, A_fname_ssd ); 
@@ -46,10 +47,13 @@ int main( int argc, char *argv[] ) {
   A_fp_hdd = fopen( A_fname_hdd, "r+" );
  
 	// read from ssd
+    printf("Reading from ssd \n");
 	clock_gettime( CLOCK_MONOTONIC, & t1 );
 	
-	read_check = fread( A_p, sizeof( double ), m_A * n_A, A_fp_ssd );
-   
+	for ( i=0; i < n_A; i += num_cols_read ) {
+	  read_check = fread( A_p, sizeof( double ), m_A * num_cols_read, A_fp_ssd );
+    }
+
 	clock_gettime( CLOCK_MONOTONIC, & t2 );
 	diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
 	t_read_ssd += ( double ) diff / (1E9);
@@ -57,9 +61,12 @@ int main( int argc, char *argv[] ) {
     fseek( A_fp_ssd, 0, SEEK_SET );
  
 	// read from hdd
+    printf("Reading from hdd \n");
 	clock_gettime( CLOCK_MONOTONIC, & t1 );
 	
-	read_check = fread( A_p, sizeof( double ), m_A * n_A, A_fp_hdd );
+	for ( i=0; i < n_A; i += num_cols_read ) {
+	  read_check = fread( A_p, sizeof( double ), m_A * num_cols_read, A_fp_hdd );
+	}
 	
 	clock_gettime( CLOCK_MONOTONIC, & t2 );
 	diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
@@ -70,18 +77,24 @@ int main( int argc, char *argv[] ) {
   // write to hard drives and time
 	
 	// write to ssd
+    printf("Writing to ssd \n");
 	clock_gettime( CLOCK_MONOTONIC, & t1 );
 
-	read_check = fwrite( A_p, sizeof( double ), m_A * n_A, A_fp_ssd );
+	for ( i=0; i < n_A; i += num_cols_read ) {
+	  read_check = fwrite( A_p, sizeof( double ), m_A * num_cols_read, A_fp_ssd );
+	}
 
 	clock_gettime( CLOCK_MONOTONIC, & t2 );
 	diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;
 	t_write_ssd += ( double ) diff / (1E9);
 	
 	// write to hdd
+    printf("Writing to hdd \n");
 	clock_gettime( CLOCK_MONOTONIC, & t1 );
 
-	read_check = fwrite( A_p, sizeof( double ), m_A * n_A, A_fp_hdd );
+	for ( i=0; i < n_A; i += num_cols_read ) {
+	  read_check = fwrite( A_p, sizeof( double ), m_A * num_cols_read, A_fp_hdd );
+	}
 
 	clock_gettime( CLOCK_MONOTONIC, & t2 );
 	diff = (1E9) * (t2.tv_sec - t1.tv_sec) + t2.tv_nsec - t1.tv_nsec;

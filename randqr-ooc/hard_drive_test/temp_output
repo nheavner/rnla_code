@@ -1,0 +1,11 @@
+The matrices have been generated 
+Reading from ssd 
+Reading from hdd 
+Writing to ssd 
+Writing to hdd 
+Time required for reading from ssd: 3.125715e+01
+Time required for reading from hdd: 6.020509e+02
+Time required for writing to ssd: 4.715071e+01
+Time required for writing to hdd: 4.529543e+02
+Total time: 1.666454e+03
+% End of Program

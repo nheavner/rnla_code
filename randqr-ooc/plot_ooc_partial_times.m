@@ -1,7 +1,7 @@
 clear
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% read in data %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-cpqr_ooc_partial_times
+cpqr_ooc_partial_times_k1000
 
 
 %%%%%%%%%% generate line vals for predicted ssd performance  %%%%%%%%%%%

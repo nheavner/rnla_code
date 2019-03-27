@@ -47,6 +47,7 @@ WITHOUT ANY WARRANTY EXPRESSED OR IMPLIED.
 #include <stdint.h>
 #include <math.h>
 #include <time.h>
+#include <string.h>
 
 #include "hqrrp_ooc.h"
 #include <mkl.h>
@@ -133,9 +134,12 @@ static int NoFLA_QRP_pivot_G_B_C( int j_max_col,
 
 
 // ============================================================================
-int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
+int hqrrp_ooc( char * dir_name, size_t dir_name_size,
+		char * A_fname, size_t A_fname_size,
+		int m_A, int n_A, int ldim_A,
         int * buff_jpvt, double * buff_tau,
-        int nb_alg, int kk, int pp, int panel_pivoting ) {
+        int nb_alg, int kk, int pp, int panel_pivoting,
+		int num_cols_read ) {
 //
 // HQRRP: It computes the Householder QR with Randomized Pivoting of matrix A.
 // This routine is almost compatible with LAPACK's dgeqp3.
@@ -198,6 +202,11 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   FILE    * A_fp;
   size_t err_check;
 
+  char file_path[ dir_name_size / sizeof( dir_name[0] ) +
+				  A_fname_size / sizeof( A_fname[0] )];
+  strcpy( file_path, dir_name );
+  strcat( file_path, A_fname );
+
 #ifdef PROFILE
  struct timespec t1, t2;
  uint64_t diff;
@@ -227,7 +236,7 @@ int hqrrp_ooc( char * dir_name, char * A_fname, int m_A, int n_A, int ldim_A,
   buff_p = buff_jpvt;
   buff_t = buff_tau;
 
-  A_fp = fopen( A_fname, "r+" );
+  A_fp = fopen( file_path, "r+" );
 
   // Quick return.
   if( mn_A == 0 ) {
